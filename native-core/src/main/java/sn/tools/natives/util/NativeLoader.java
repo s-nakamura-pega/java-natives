@@ -1,4 +1,4 @@
-package sn.tools.swing.natives.util;
+package sn.tools.natives.util;
 
 import java.io.IOException;
 import java.io.InputStream;

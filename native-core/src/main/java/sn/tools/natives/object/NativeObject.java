@@ -1,4 +1,4 @@
-package sn.tools.swing.natives.object;
+package sn.tools.natives.object;
 
 public interface NativeObject extends AutoCloseable {
 
@@ -10,30 +10,25 @@ public interface NativeObject extends AutoCloseable {
 	/**
 	 * close 済みかどうか
 	 */
-	boolean isClosed(long handleId);
+	default boolean isClosed() {
+		return getHandleId() == 0;
+	}
 
 	/**
 	 * 接続中かどうか（isClosed の反転）
 	 */
-	default boolean isConnecting(long handleId) {
-		return !isClosed(handleId);
+	default boolean isConnected() {
+		return !isClosed();
 	}
-
-	/**
-	 * ハンドルIDを指定して close
-	 */
-	void close(long handleId);
 
 	/**
 	 * AutoCloseable の close() は handleId を使う
 	 */
 	@Override
-	default void close() {
-		close(getHandleId());
-	}
+	void close();
 
 	public static void close(NativeObject object) {
-		if (object.isConnecting(object.getHandleId())) {
+		if (object.isConnected()) {
 			object.close();
 		}
 	}

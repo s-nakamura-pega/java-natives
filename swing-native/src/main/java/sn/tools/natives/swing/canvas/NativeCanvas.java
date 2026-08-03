@@ -1,4 +1,4 @@
-package sn.tools.swing.natives.canvas;
+package sn.tools.natives.swing.canvas;
 
 public interface NativeCanvas {
 

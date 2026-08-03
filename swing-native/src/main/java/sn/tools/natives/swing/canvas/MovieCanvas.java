@@ -1,4 +1,4 @@
-package sn.tools.swing.natives.canvas;
+package sn.tools.natives.swing.canvas;
 
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
