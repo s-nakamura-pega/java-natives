@@ -1,17 +1,21 @@
 package sn.tools.natives.swing.canvas;
 
-public interface NativeMovieCanvas extends NativeCanvas {
+public interface NativeMovieCanvas extends NativeComponent {
 
-	void setData(String path);
+	int setData(byte[] data);
 
 	void start();
 
 	void stop();
 
-	void rewind(int ms);
-
-	void forward(int ms);
+	void movePoint(int ms);
 
 	boolean isDecodeReady();
+
+	public boolean isStarted();
+
+	public int getCurrentPoint();
+
+	public void setCurrentPoint(int currentPoint);
 
 }
