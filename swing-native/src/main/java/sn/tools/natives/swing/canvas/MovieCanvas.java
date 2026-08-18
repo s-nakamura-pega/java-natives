@@ -2,6 +2,11 @@ package sn.tools.natives.swing.canvas;
 
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.function.Consumer;
 
 import javax.swing.JComponent;
@@ -53,7 +58,48 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 	}
 
 	@Override
-	public native int setData(byte[] data);
+	public long setData(byte[] data) {
+		String tempDir = System.getProperty("java.io.tmpdir");
+
+		Path dir = Paths.get(tempDir, "moviecanvas", String.valueOf(handleId));
+		try {
+			Files.createDirectories(dir);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+
+		// data.bin を毎回上書き（レコが単一ファイルを読む仕様ならこれでOK）
+		Path tempFile = dir.resolve("data.bin");
+
+		try {
+			Files.write(tempFile, data);
+			return setFile(tempFile.toAbsolutePath().toString());
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	@Override
+	public void close() {
+		destroy();
+
+		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
+		try {
+			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(handleId));
+			if (Files.exists(dir)) {
+				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
+						.forEach(p -> {
+							try {
+								Files.deleteIfExists(p);
+							} catch (IOException ignored) {
+							}
+						});
+			}
+		} catch (IOException ignored) {
+		}
+
+		handleId = 0;
+	}
 
 	@Override
 	public native void start();
@@ -90,12 +136,6 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 	private native void destroy();
 
 	@Override
-	public void close() {
-		destroy();
-		handleId = 0;
-	}
-
-	@Override
 	public native boolean isStarted();
 
 	@Override
@@ -112,5 +152,8 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 	public void setPointRenderer(Consumer<Integer> pointRenderer) {
 		this.pointRenderer = pointRenderer;
 	}
+
+	@Override
+	public native long setFile(String filePath);
 
 }

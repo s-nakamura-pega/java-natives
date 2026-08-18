@@ -2,7 +2,9 @@ package sn.tools.natives.swing.canvas;
 
 public interface NativeMovieCanvas extends NativeComponent {
 
-	int setData(byte[] data);
+	long setFile(String file);
+
+	long setData(byte[] data);
 
 	void start();
 
