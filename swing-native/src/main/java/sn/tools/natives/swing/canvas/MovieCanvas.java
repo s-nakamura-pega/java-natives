@@ -49,6 +49,8 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 
 	@Override
 	public void repaintCallback() {
+		if (handleId == 0)
+			return;
 		int size = getFrame(frameBuffer);
 		if (size > 0) {
 			SwingUtilities.invokeLater(() -> {
@@ -187,5 +189,10 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 
 	@Override
 	public native long setFile(String filePath);
+
+	@Override
+	public void setHandleId(long handleId) {
+		this.handleId = handleId;
+	}
 
 }

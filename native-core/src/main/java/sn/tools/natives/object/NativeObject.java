@@ -8,6 +8,11 @@ public interface NativeObject extends AutoCloseable {
 	long getHandleId();
 
 	/**
+	 * ネイティブハンドルIDを返す
+	 */
+	void setHandleId(long handleId);
+
+	/**
 	 * close 済みかどうか
 	 */
 	default boolean isClosed() {

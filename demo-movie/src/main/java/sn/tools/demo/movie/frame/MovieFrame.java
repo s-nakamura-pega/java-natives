@@ -9,7 +9,6 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.Timer;
-
 import sn.tools.natives.swing.canvas.MovieCanvas;
 
 public class MovieFrame extends JFrame {
@@ -78,11 +77,11 @@ public class MovieFrame extends JFrame {
 		});
 
 		// --- シークバー操作 ---
-		seekBar.addChangeListener(_ -> {
-			int ms = seekBar.getValue();
-			canvas.movePoint(ms);
-			canvas.setCurrentPoint(ms);
-		});
+//		seekBar.addChangeListener(_ -> {
+//			int ms = seekBar.getValue();
+//			canvas.movePoint(ms);
+//			canvas.setCurrentPoint(ms);
+//		});
 
 		// MovieCanvas → seekBar の同期
 		canvas.setPointRenderer(point -> seekBar.setValue(point));
@@ -116,6 +115,12 @@ public class MovieFrame extends JFrame {
 
 		// 再生可能条件：デコード準備完了 && 再生中ではない
 		playButton.setEnabled(ready && !started);
+	}
+
+	@Override
+	public void dispose() {
+		super.dispose();
+		System.exit(0);
 	}
 
 }
