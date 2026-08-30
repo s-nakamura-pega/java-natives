@@ -77,11 +77,10 @@ public class MovieFrame extends JFrame {
 		});
 
 		// --- シークバー操作 ---
-//		seekBar.addChangeListener(_ -> {
-//			int ms = seekBar.getValue();
-//			canvas.movePoint(ms);
-//			canvas.setCurrentPoint(ms);
-//		});
+		seekBar.addChangeListener(_ -> {
+			int ms = seekBar.getValue();
+			canvas.movePoint(ms);
+		});
 
 		// MovieCanvas → seekBar の同期
 		canvas.setPointRenderer(point -> seekBar.setValue(point));
