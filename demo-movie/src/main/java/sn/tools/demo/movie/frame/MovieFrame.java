@@ -20,6 +20,8 @@ public class MovieFrame extends JFrame {
 	private final JButton stopButton;
 	private final JButton loadButton;
 	private final JSlider seekBar;
+	private boolean isSeekInnerUpdate = false;
+	private final Object lock = new Object();
 
 	public MovieFrame() {
 		super("Movie Player");

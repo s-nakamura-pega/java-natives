@@ -11,22 +11,27 @@ include_directories(
     ${JNI_INCLUDE_DIRS}/linux
 )
 
-# FFmpeg (pkg-config)
+# pkg-config
 find_package(PkgConfig REQUIRED)
+
+# FFmpeg
 pkg_check_modules(FFMPEG REQUIRED
     libavformat
     libavcodec
     libavutil
     libswscale
-    PORTAUDIO REQUIRED portaudio-2.0
 )
 
-# ★ pkg-config が返した include パスを使う
-include_directories(
-    ${FFMPEG_INCLUDE_DIRS}   # ← /usr/include/ffmpeg が入る
-    ${PORTAUDIO_INCLUDE_DIRS}
-    )
+# PortAudio（正しい pkg-config 名）
+pkg_check_modules(PORTAUDIO REQUIRED portaudio-2.0)
 
+# include path
+include_directories(
+    ${FFMPEG_INCLUDE_DIRS}
+    ${PORTAUDIO_INCLUDE_DIRS}
+)
+
+# library path
 link_directories(
     ${FFMPEG_LIBRARY_DIRS}
     ${PORTAUDIO_LIBRARY_DIRS}

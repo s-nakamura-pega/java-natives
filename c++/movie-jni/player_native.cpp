@@ -110,7 +110,8 @@ extern "C"
     PlayerStruct *player = reinterpret_cast<PlayerStruct *>(handle);
 
     std::cout << "[native] stop()" << std::endl;
-    player->stop();
+
+    player->pause();
   }
 
   // MovieCanvas.movePoint(int)
