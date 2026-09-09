@@ -80,6 +80,9 @@ public class MovieFrame extends JFrame {
 
 		// --- シークバー操作 ---
 //		seekBar.addChangeListener(_ -> {
+//			if (isSeekInnerUpdate) {
+//				return;
+//			}
 //			if (!seekBar.getValueIsAdjusting()) {
 //				int ms = seekBar.getValue();
 //				canvas.movePoint(ms);
@@ -87,7 +90,11 @@ public class MovieFrame extends JFrame {
 //		});
 
 		// MovieCanvas → seekBar の同期
-		canvas.setPointRenderer(point -> seekBar.setValue(point));
+		canvas.setPointRenderer(point -> {
+			isSeekInnerUpdate = true;
+			seekBar.setValue(point);
+			isSeekInnerUpdate = false;
+		});
 
 		// --- 状態監視タイマー（200msごとにボタン状態を更新） ---
 		Timer stateTimer = new Timer(200, _ -> updatePlayButtonState());

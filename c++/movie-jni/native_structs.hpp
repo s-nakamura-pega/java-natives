@@ -563,27 +563,22 @@ struct PlayerStruct
         if (!fmtCtx || !videoStream)
             return;
 
-        {
-            std::lock_guard<std::mutex> fmtLock(fmtMutex);
+        int64_t ts = (int64_t)((double)ms / 1000.0 *
+                               videoStream->time_base.den /
+                               videoStream->time_base.num);
 
-            int64_t ts = (int64_t)((double)ms / 1000.0 *
-                                   videoStream->time_base.den /
-                                   videoStream->time_base.num);
+        av_seek_frame(fmtCtx, videoStreamIndex, ts, AVSEEK_FLAG_BACKWARD);
 
-            av_seek_frame(fmtCtx, videoStreamIndex, ts, AVSEEK_FLAG_BACKWARD);
-
-            avcodec_flush_buffers(decCtx);
-            if (audioCtx)
-                avcodec_flush_buffers(audioCtx);
-        }
-
-        clearQueues();
-        totalSamplesPlayed = 0;
-
-        playing = true;
+        avcodec_flush_buffers(decCtx);
+        if (audioCtx)
+            avcodec_flush_buffers(audioCtx);
     }
 
-    bool isDecodeReady() const { return decodeReady; }
+    bool
+    isDecodeReady() const
+    {
+        return decodeReady;
+    }
     bool isStarted() const { return playing; }
 
     int getFrame(unsigned char *out)
