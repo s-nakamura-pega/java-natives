@@ -9,7 +9,7 @@ extern "C"
 }
 #include <chrono>
 #include <portaudio.h>
-
+#include <iostream>
 #include <cstring>
 #include <thread>
 #include <atomic>
@@ -99,6 +99,9 @@ struct PlayerStruct
     // audio clock（音声の再生位置）
     std::atomic<long> totalSamplesPlayed{0};
 
+    std::atomic<bool> seekRequested{false};
+    std::atomic<int> seekTargetMs{0};
+
     // Java
     JavaVM *jvm = nullptr;
     jobject javaCanvasObj = nullptr;
@@ -138,6 +141,14 @@ struct PlayerStruct
         clearQueues();
 
         freeContexts();
+    }
+
+    static int interruptCallback(void *opaque)
+    {
+        PlayerStruct *p = reinterpret_cast<PlayerStruct *>(opaque);
+
+        // ★ seekRequested が true なら av_read_frame を中断
+        return p->seekRequested.load() ? 1 : 0;
     }
 
     void clearQueues()
@@ -213,6 +224,9 @@ struct PlayerStruct
             return -1;
         if (avformat_find_stream_info(fmtCtx, nullptr) < 0)
             return -1;
+
+        fmtCtx->interrupt_callback.callback = &PlayerStruct::interruptCallback;
+        fmtCtx->interrupt_callback.opaque = this;
 
         videoStreamIndex = -1;
         audioStreamIndex = -1;
@@ -327,35 +341,6 @@ struct PlayerStruct
         readThreadRun();
         videoThreadRun();
         audioThreadRun();
-    }
-
-    void readThreadRun()
-    {
-        readThread = std::thread([this]()
-                                 {
-            AVPacket *pkt = av_packet_alloc();
-
-            while (running) {
-                {
-                    // ① fmtCtx を先にロック
-                    std::lock_guard<std::mutex> fmtLock(fmtMutex);
-
-                    if (av_read_frame(fmtCtx, pkt) < 0) break;
-                }
-
-                {
-                    // ② queue を後からロック
-                    std::lock_guard<std::mutex> queueLock(queueMutex);
-
-                    if (pkt->stream_index == videoStreamIndex) {
-                        videoQueue.push(av_packet_clone(pkt));
-                    } else if (pkt->stream_index == audioStreamIndex) {
-                        audioQueue.push(av_packet_clone(pkt));
-                    }
-                }
-                av_packet_unref(pkt);
-            }
-        av_packet_free(&pkt); });
     }
 
     void videoThreadRun()
@@ -510,33 +495,41 @@ struct PlayerStruct
         av_frame_free(&frame); });
     }
 
+    // ------------------------------
+    // 再生開始 / 再開
+    // ------------------------------
     void start()
     {
-        // すでに running なら pause 解除
+        // すでに running なら単なる「再開」
         if (running)
         {
             playing = true;
             return;
         }
 
-        // ★ 完全停止後の再起動処理
+        // 完全停止後の再起動
         if (paStream)
             Pa_StartStream(paStream);
-
         if (fmtCtx)
             av_read_play(fmtCtx);
 
         running = true;
-        mediaThreadsRun();
+        mediaThreadsRun(); // read / video / audio スレッド起動
 
         playing = true;
     }
 
+    // ------------------------------
+    // 一時停止
+    // ------------------------------
     void pause()
     {
         playing = false;
     }
 
+    // ------------------------------
+    // 完全停止
+    // ------------------------------
     void stop()
     {
         playing = false;
@@ -545,33 +538,101 @@ struct PlayerStruct
         if (fmtCtx)
             av_read_pause(fmtCtx);
 
-        threadWait();
-        clearQueues();
+        threadWait();  // スレッド join
+        clearQueues(); // キュー破棄
 
-        // ★ PortAudio 停止（忘れると音声が残る）
         if (paStream)
             Pa_StopStream(paStream);
 
-        // ★ AVSync リセット
         totalSamplesPlayed = 0;
+
+        // ★ seek フラグもリセットしておく
+        seekTargetMs.store(0);
+        seekRequested.store(false);
     }
 
+    // ------------------------------
+    // readThreadRun（唯一の seek 処理場所）
+    // ------------------------------
+    void readThreadRun()
+    {
+        readThread = std::thread([this]()
+                                 {
+            AVPacket *pkt = av_packet_alloc();
+
+            while (running) {
+
+                // ★ ここだけで seek を処理する
+                bool doSeek = seekRequested.exchange(false);  // フラグを消費
+                if (doSeek) {
+                    std::cout << "[native] seek requested" << std::endl;
+                    int ms = seekTargetMs.load();
+
+                    int64_t ts = (int64_t)((double)ms / 1000.0 *
+                                           videoStream->time_base.den /
+                                           videoStream->time_base.num);
+
+                    int64_t oneSec =
+                        videoStream->time_base.den / videoStream->time_base.num;
+                    int64_t min_ts = ts - oneSec;
+                    int64_t max_ts = ts + oneSec;
+
+                    {
+                        std::lock_guard<std::mutex> fmtLock(fmtMutex);
+
+                        if (avformat_seek_file(fmtCtx, videoStreamIndex,
+                                               min_ts, ts, max_ts,
+                                               AVSEEK_FLAG_BACKWARD) < 0) {
+                            std::cout << "[native] seek error" << std::endl;
+                        } else {
+                            avcodec_flush_buffers(decCtx);
+                            if (audioCtx)
+                                avcodec_flush_buffers(audioCtx);
+                        }
+                    }
+
+                    clearQueues();
+                    totalSamplesPlayed = 0;
+
+                    // ★ 再生再開
+                    playing = true;
+                }
+
+                // ★ 通常の read_frame
+                if (av_read_frame(fmtCtx, pkt) < 0)
+                    break;
+
+                {
+                    std::lock_guard<std::mutex> queueLock(queueMutex);
+
+                    if (pkt->stream_index == videoStreamIndex)
+                        videoQueue.push(av_packet_clone(pkt));
+                    else if (pkt->stream_index == audioStreamIndex)
+                        audioQueue.push(av_packet_clone(pkt));
+                }
+
+                av_packet_unref(pkt);
+            }
+
+            av_packet_free(&pkt); });
+    }
+
+    // ------------------------------
+    // movePoint（UI からの seek 要求）
+    // ------------------------------
     void movePoint(int ms)
     {
-        playing = false;
-
         if (!fmtCtx || !videoStream)
             return;
 
-        int64_t ts = (int64_t)((double)ms / 1000.0 *
-                               videoStream->time_base.den /
-                               videoStream->time_base.num);
+        // 再生中でも「一旦止める」だけ（seek は readThread がやる）
+        playing = false;
 
-        av_seek_frame(fmtCtx, videoStreamIndex, ts, AVSEEK_FLAG_BACKWARD);
+        seekTargetMs.store(ms);
+        seekRequested.store(true);
 
-        avcodec_flush_buffers(decCtx);
-        if (audioCtx)
-            avcodec_flush_buffers(audioCtx);
+        // running が false の場合は、次の start() で readThread が起動して
+        // その最初のループで doSeek が true になる
     }
 
     bool
