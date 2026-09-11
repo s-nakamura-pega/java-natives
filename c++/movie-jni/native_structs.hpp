@@ -99,9 +99,6 @@ struct PlayerStruct
     // audio clock（音声の再生位置）
     std::atomic<long> totalSamplesPlayed{0};
 
-    std::atomic<bool> seekRequested{false};
-    std::atomic<int> seekTargetMs{0};
-
     // Java
     JavaVM *jvm = nullptr;
     jobject javaCanvasObj = nullptr;
@@ -141,14 +138,6 @@ struct PlayerStruct
         clearQueues();
 
         freeContexts();
-    }
-
-    static int interruptCallback(void *opaque)
-    {
-        PlayerStruct *p = reinterpret_cast<PlayerStruct *>(opaque);
-
-        // ★ seekRequested が true なら av_read_frame を中断
-        return p->seekRequested.load() ? 1 : 0;
     }
 
     void clearQueues()
@@ -222,11 +211,9 @@ struct PlayerStruct
 
         if (avformat_open_input(&fmtCtx, path, nullptr, nullptr) < 0)
             return -1;
+        fmtCtx->flags |= AVFMT_FLAG_NONBLOCK;
         if (avformat_find_stream_info(fmtCtx, nullptr) < 0)
             return -1;
-
-        fmtCtx->interrupt_callback.callback = &PlayerStruct::interruptCallback;
-        fmtCtx->interrupt_callback.opaque = this;
 
         videoStreamIndex = -1;
         audioStreamIndex = -1;
@@ -347,213 +334,185 @@ struct PlayerStruct
     {
         videoThread = std::thread([this]()
                                   {
-        JNIEnv *env = nullptr;
-        jvm->AttachCurrentThread((void **)&env, nullptr);
+            JNIEnv *env = nullptr;
+            jvm->AttachCurrentThread((void **)&env, nullptr);
 
-        jclass cls = env->GetObjectClass(javaCanvasObj);
-        jmethodID repaintMid = env->GetMethodID(cls, "repaintCallback", "()V");
+            jclass cls = env->GetObjectClass(javaCanvasObj);
+            jmethodID repaintMid = env->GetMethodID(cls, "repaintCallback", "()V");
 
-        AVFrame *frame = av_frame_alloc();
-        AVFrame *rgbFrame = av_frame_alloc();
+            AVFrame *frame = av_frame_alloc();
+            AVFrame *rgbFrame = av_frame_alloc();
 
-        rgbFrame->format = AV_PIX_FMT_RGB24;
-        rgbFrame->width = frameWidth;
-        rgbFrame->height = frameHeight;
-        av_frame_get_buffer(rgbFrame, 32);
+            rgbFrame->format = AV_PIX_FMT_RGB24;
+            rgbFrame->width  = frameWidth;
+            rgbFrame->height = frameHeight;
+            av_frame_get_buffer(rgbFrame, 32);
 
-        while (running) {
-            if (!playing) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                continue;
-            }
-
-            AVPacket *pkt = nullptr;
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                if (!videoQueue.empty()) {
-                    pkt = videoQueue.front();
-                    videoQueue.pop();
-                }
-            }
-
-            if (!pkt) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                continue;
-            }
-
-            avcodec_send_packet(decCtx, pkt);
-
-            while (avcodec_receive_frame(decCtx, frame) == 0) {
-
-                // 映像 PTS（ms）
-                double pts_ms = 0;
-                if (frame->pts != AV_NOPTS_VALUE)
-                    pts_ms = frame->pts * av_q2d(videoStream->time_base) * 1000.0;
-
-                // ★ 音声クロック（ms）
-                double audioClockMs =
-                    (double)totalSamplesPlayed.load() / 48000.0 * 1000.0;
-
-                // ★ 映像と音声の差分
-                double diff = pts_ms - audioClockMs;
-
-                // 映像が早い → 待つ
-                if (diff > 5) {
-                    std::this_thread::sleep_for(
-                        std::chrono::milliseconds((long)diff));
-                }
-                // 映像が遅い → スキップ
-                else if (diff < -30) {
+            while (running) {
+                if (!playing) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
                     continue;
                 }
 
-                // Java に現在位置を通知
-                jclass cls = env->GetObjectClass(javaCanvasObj);
-                jmethodID setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(I)V");
-                env->CallVoidMethod(javaCanvasObj, setPointMid, (jint)pts_ms);
-
-                sws_scale(
-                    swsCtx,
-                    frame->data, frame->linesize,
-                    0, frameHeight,
-                    rgbFrame->data, rgbFrame->linesize
-                );
-
+                AVPacket *pkt = nullptr;
                 {
-                    std::lock_guard<std::mutex> lock(frameMutex);
-                    std::memcpy(frameBuffer.data(), rgbFrame->data[0],
-                                frameWidth * frameHeight * 3);
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    if (!videoQueue.empty()) {
+                        pkt = videoQueue.front();
+                        videoQueue.pop();
+                    }
                 }
 
-                env->CallVoidMethod(javaCanvasObj, repaintMid);
+                if (!pkt) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    continue;
+                }
+
+                avcodec_send_packet(decCtx, pkt);
+
+                while (avcodec_receive_frame(decCtx, frame) == 0) {
+
+                    double pts_ms = 0.0;
+                    if (frame->pts != AV_NOPTS_VALUE)
+                        pts_ms = frame->pts * av_q2d(videoStream->time_base) * 1000.0;
+
+                    double audioClockMs =
+                        (double)totalSamplesPlayed.load() / 48000.0 * 1000.0;
+
+                    double diff = pts_ms - audioClockMs;
+
+                    // 映像が少し早いときだけ、最大 50ms まで待つ
+                    if (diff > 5 && diff < 50) {
+                        std::this_thread::sleep_for(
+                            std::chrono::milliseconds((long)diff));
+                    }
+                    // 極端に遅れているときだけ、軽くスキップ
+                    else if (diff < -100) {
+                        continue;
+                    }
+
+                    jclass clsLocal = env->GetObjectClass(javaCanvasObj);
+                    jmethodID setPointMid = env->GetMethodID(clsLocal, "setCurrentPoint", "(I)V");
+                    env->CallVoidMethod(javaCanvasObj, setPointMid, (jint)pts_ms);
+
+                    sws_scale(
+                        swsCtx,
+                        frame->data, frame->linesize,
+                        0, frameHeight,
+                        rgbFrame->data, rgbFrame->linesize
+                    );
+
+                    {
+                        std::lock_guard<std::mutex> lock(frameMutex);
+                        std::memcpy(frameBuffer.data(), rgbFrame->data[0],
+                                    frameWidth * frameHeight * 3);
+                    }
+
+                    env->CallVoidMethod(javaCanvasObj, repaintMid);
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+
+                av_packet_free(&pkt);
             }
 
-            av_packet_free(&pkt);
-        }
+            av_frame_free(&rgbFrame);
+            av_frame_free(&frame);
 
-        av_frame_free(&rgbFrame);
-        av_frame_free(&frame);
-
-        jvm->DetachCurrentThread(); });
+            jvm->DetachCurrentThread(); });
     }
 
     void audioThreadRun()
     {
         audioThread = std::thread([this]()
                                   {
-        if (!audioCtx || !swrCtx || !paStream) return;
+            if (!audioCtx || !swrCtx || !paStream) return;
 
-        AVFrame *frame = av_frame_alloc();
+            AVFrame *frame = av_frame_alloc();
 
-        const int maxSamples = 4096;
-        std::vector<int16_t> pcmBuf(maxSamples * 2);
+            const int maxSamples = 4096;
+            std::vector<int16_t> pcmBuf(maxSamples * 2);
 
-        while (running) {
-            if (!playing) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                continue;
-            }
-
-            AVPacket *pkt = nullptr;
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                if (!audioQueue.empty()) {
-                    pkt = audioQueue.front();
-                    audioQueue.pop();
+            while (running) {
+                if (!playing) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    continue;
                 }
-            }
 
-            if (!pkt) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                continue;
-            }
-
-            avcodec_send_packet(audioCtx, pkt);
-
-            while (avcodec_receive_frame(audioCtx, frame) == 0) {
-                uint8_t *outData[] = {
-                    reinterpret_cast<uint8_t *>(pcmBuf.data())
-                };
-
-                int outSamples = swr_convert(
-                    swrCtx,
-                    outData,
-                    maxSamples,
-                    (const uint8_t **)frame->data,
-                    frame->nb_samples
-                );
-
-                if (outSamples > 0) {
-                    Pa_WriteStream(paStream, pcmBuf.data(), outSamples);
-
-                    // ★ 音声クロック更新（ms に変換するのは videoThread 側）
-                    totalSamplesPlayed += outSamples;
+                AVPacket *pkt = nullptr;
+                {
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    if (!audioQueue.empty()) {
+                        pkt = audioQueue.front();
+                        audioQueue.pop();
+                    }
                 }
+
+                if (!pkt) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    continue;
+                }
+
+                avcodec_send_packet(audioCtx, pkt);
+
+                while (avcodec_receive_frame(audioCtx, frame) == 0) {
+                    uint8_t *outData[] = {
+                        reinterpret_cast<uint8_t *>(pcmBuf.data())
+                    };
+
+                    int outSamples = swr_convert(
+                        swrCtx,
+                        outData,
+                        maxSamples,
+                        (const uint8_t **)frame->data,
+                        frame->nb_samples
+                    );
+
+                    if (outSamples > 0) {
+                        Pa_WriteStream(paStream, pcmBuf.data(), outSamples);
+                        totalSamplesPlayed += outSamples;
+                    }
+                }
+                av_packet_free(&pkt);
             }
-            av_packet_free(&pkt);
-        }
-        av_frame_free(&frame); });
+            av_frame_free(&frame); });
     }
 
-    // ------------------------------
-    // 再生開始 / 再開
-    // ------------------------------
     void start()
     {
-        // すでに running なら単なる「再開」
         if (running)
         {
             playing = true;
             return;
         }
 
-        // 完全停止後の再起動
         if (paStream)
             Pa_StartStream(paStream);
-        if (fmtCtx)
-            av_read_play(fmtCtx);
 
         running = true;
-        mediaThreadsRun(); // read / video / audio スレッド起動
-
         playing = true;
+        mediaThreadsRun();
     }
 
-    // ------------------------------
-    // 一時停止
-    // ------------------------------
     void pause()
     {
         playing = false;
     }
 
-    // ------------------------------
-    // 完全停止
-    // ------------------------------
     void stop()
     {
         playing = false;
         running = false;
 
-        if (fmtCtx)
-            av_read_pause(fmtCtx);
-
-        threadWait();  // スレッド join
-        clearQueues(); // キュー破棄
+        threadWait();
+        clearQueues();
 
         if (paStream)
             Pa_StopStream(paStream);
 
         totalSamplesPlayed = 0;
-
-        // ★ seek フラグもリセットしておく
-        seekTargetMs.store(0);
-        seekRequested.store(false);
     }
 
-    // ------------------------------
-    // readThreadRun（唯一の seek 処理場所）
-    // ------------------------------
     void readThreadRun()
     {
         readThread = std::thread([this]()
@@ -561,46 +520,16 @@ struct PlayerStruct
             AVPacket *pkt = av_packet_alloc();
 
             while (running) {
+                int ret = av_read_frame(fmtCtx, pkt);
 
-                // ★ ここだけで seek を処理する
-                bool doSeek = seekRequested.exchange(false);  // フラグを消費
-                if (doSeek) {
-                    std::cout << "[native] seek requested" << std::endl;
-                    int ms = seekTargetMs.load();
-
-                    int64_t ts = (int64_t)((double)ms / 1000.0 *
-                                           videoStream->time_base.den /
-                                           videoStream->time_base.num);
-
-                    int64_t oneSec =
-                        videoStream->time_base.den / videoStream->time_base.num;
-                    int64_t min_ts = ts - oneSec;
-                    int64_t max_ts = ts + oneSec;
-
-                    {
-                        std::lock_guard<std::mutex> fmtLock(fmtMutex);
-
-                        if (avformat_seek_file(fmtCtx, videoStreamIndex,
-                                               min_ts, ts, max_ts,
-                                               AVSEEK_FLAG_BACKWARD) < 0) {
-                            std::cout << "[native] seek error" << std::endl;
-                        } else {
-                            avcodec_flush_buffers(decCtx);
-                            if (audioCtx)
-                                avcodec_flush_buffers(audioCtx);
-                        }
-                    }
-
-                    clearQueues();
-                    totalSamplesPlayed = 0;
-
-                    // ★ 再生再開
-                    playing = true;
+                if (ret == AVERROR(EAGAIN)) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    continue;
                 }
 
-                // ★ 通常の read_frame
-                if (av_read_frame(fmtCtx, pkt) < 0)
+                if (ret < 0) {
                     break;
+                }
 
                 {
                     std::lock_guard<std::mutex> queueLock(queueMutex);
@@ -617,26 +546,48 @@ struct PlayerStruct
             av_packet_free(&pkt); });
     }
 
-    // ------------------------------
-    // movePoint（UI からの seek 要求）
-    // ------------------------------
     void movePoint(int ms)
     {
+        pause();
         if (!fmtCtx || !videoStream)
             return;
+        stop();
+        std::cout << "[native] seek requested" << std::endl;
 
-        // 再生中でも「一旦止める」だけ（seek は readThread がやる）
-        playing = false;
+        int64_t ts = (int64_t)((double)ms / 1000.0 *
+                               videoStream->time_base.den /
+                               videoStream->time_base.num);
 
-        seekTargetMs.store(ms);
-        seekRequested.store(true);
+        int64_t oneSec =
+            videoStream->time_base.den / videoStream->time_base.num;
+        int64_t min_ts = ts - oneSec;
+        int64_t max_ts = ts + oneSec;
 
-        // running が false の場合は、次の start() で readThread が起動して
-        // その最初のループで doSeek が true になる
+        {
+            std::lock_guard<std::mutex> fmtLock(fmtMutex);
+
+            if (avformat_seek_file(fmtCtx, videoStreamIndex,
+                                   min_ts, ts, max_ts,
+                                   AVSEEK_FLAG_BACKWARD) < 0)
+            {
+                std::cout << "[native] seek error" << std::endl;
+            }
+            else
+            {
+                avcodec_flush_buffers(decCtx);
+                if (audioCtx)
+                    avcodec_flush_buffers(audioCtx);
+            }
+        }
+
+        clearQueues();
+
+        long samplesAtSeek =
+            (long)((double)ms / 1000.0 * 48000.0);
+        totalSamplesPlayed = samplesAtSeek;
     }
 
-    bool
-    isDecodeReady() const
+    bool isDecodeReady() const
     {
         return decodeReady;
     }
