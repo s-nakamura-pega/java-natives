@@ -22,6 +22,7 @@ clang++ \
     -shared -fPIC \
     jni_onload.cpp \
     player_native.cpp \
+    dvd_player_native.cpp \
     $FFMPEG_LIBS \
     $PORTAUDIO_LIBS \
     -o movie_native.so
