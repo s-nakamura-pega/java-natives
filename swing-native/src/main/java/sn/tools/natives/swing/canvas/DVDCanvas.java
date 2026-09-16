@@ -52,6 +52,8 @@ public class DVDCanvas extends JComponent implements NativeDVDCanvas {
 			}
 
 		});
+		setFocusable(true);
+		requestFocusInWindow();
 	}
 
 	@Override

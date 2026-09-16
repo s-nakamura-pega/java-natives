@@ -65,6 +65,7 @@ public class DVDMovieFrame extends JFrame {
 		// --- ファイル読み込みイベント ---
 		loadButton.addActionListener(_ -> {
 			JFileChooser chooser = new JFileChooser();
+			chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
 			int result = chooser.showOpenDialog(DVDMovieFrame.this);
 			if (result == JFileChooser.APPROVE_OPTION) {
 				File file = chooser.getSelectedFile();

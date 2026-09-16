@@ -68,8 +68,13 @@ add_library(movie_native SHARED
 # ----------------------------------------
 target_link_libraries(movie_native
     ${JNI_LIBRARIES}
-    ${FFMPEG_LIBRARIES}
+    ${AVCODEC_LIBRARIES}
+    ${AVFORMAT_LIBRARIES}
+    ${AVUTIL_LIBRARIES}
+    ${SWSCALE_LIBRARIES}
+    ${SWRESAMPLE_LIBRARIES}
     ${PORTAUDIO_LIBRARIES}
     ${DVDNAV_LIBRARIES}
     ${DVDREAD_LIBRARIES}
 )
+

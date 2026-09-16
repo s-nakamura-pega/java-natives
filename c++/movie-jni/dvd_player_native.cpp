@@ -54,6 +54,7 @@ extern "C"
       return;
 
     auto *player = reinterpret_cast<DVDPlayerStruct *>(handle);
+    player->stop();
     delete player;
 
     jmethodID setMid = env->GetMethodID(cls, "setHandleId", "(J)V");

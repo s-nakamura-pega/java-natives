@@ -556,33 +556,110 @@ struct DVDPlayerStruct
     {
         readThread = std::thread([this]()
                                  {
-            AVPacket *pkt = av_packet_alloc();
+        if (isDvd && nav)
+        {
+            uint8_t buf[DVD_VIDEO_LB_LEN]; // 2048 bytes
+            int32_t event = 0;
+            int32_t len = 0;
 
-            while (running) {
-                int ret = av_read_frame(fmtCtx, pkt);
+            while (running)
+            {
+                dvdnav_status_t st = dvdnav_get_next_block(nav, buf, &event, &len);
 
-                if (ret == AVERROR(EAGAIN)) {
+                if (st == DVDNAV_STATUS_ERR)
+                {
                     std::this_thread::sleep_for(std::chrono::milliseconds(5));
                     continue;
                 }
 
-                if (ret < 0) {
-                    break;
-                }
-
+                if (event == DVDNAV_BLOCK_OK)
                 {
-                    std::lock_guard<std::mutex> queueLock(queueMutex);
+                    // MPEG2 PS block (2048 bytes)
+                    AVPacket *pkt = av_packet_alloc();
+                    av_new_packet(pkt, len);
+                    memcpy(pkt->data, buf, len);
 
-                    if (pkt->stream_index == videoStreamIndex)
-                        videoQueue.push(av_packet_clone(pkt));
-                    else if (pkt->stream_index == audioStreamIndex)
-                        audioQueue.push(av_packet_clone(pkt));
+                    {
+                        std::lock_guard<std::mutex> lock(queueMutex);
+                        videoQueue.push(pkt);
+                    }
                 }
+                else
+                {
+                    // メニューイベントなど
+                    handleDvdEvent(event, buf, len);
+                }
+            }
+            return;
+        }
 
-                av_packet_unref(pkt);
+        // 通常動画（FFmpeg）
+        AVPacket *pkt = av_packet_alloc();
+        while (running)
+        {
+            int ret = av_read_frame(fmtCtx, pkt);
+            if (ret == AVERROR(EAGAIN))
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                continue;
+            }
+            if (ret < 0)
+                break;
+
+            {
+                std::lock_guard<std::mutex> queueLock(queueMutex);
+                if (pkt->stream_index == videoStreamIndex)
+                    videoQueue.push(av_packet_clone(pkt));
+                else if (pkt->stream_index == audioStreamIndex)
+                    audioQueue.push(av_packet_clone(pkt));
             }
 
-            av_packet_free(&pkt); });
+            av_packet_unref(pkt);
+        }
+        av_packet_free(&pkt); });
+    }
+
+    void handleDvdEvent(int32_t event, uint8_t *buf, int32_t len)
+    {
+        switch (event)
+        {
+        case DVDNAV_NAV_PACKET:
+            // メニューのハイライト情報（PCI/DSI）
+            // 必要なら解析する
+            break;
+
+        case DVDNAV_STILL_FRAME:
+            // 静止画メニュー（時間指定 or 無限）
+            // buf に still フレーム情報が入っている
+            // とりあえず無視して OK
+            break;
+
+        case DVDNAV_WAIT:
+            // DVDNAV が内部処理中
+            break;
+
+        case DVDNAV_STOP:
+            // 再生終了
+            playing = false;
+            running = false;
+            break;
+
+        case DVDNAV_SPU_STREAM_CHANGE:
+        case DVDNAV_AUDIO_STREAM_CHANGE:
+        case DVDNAV_VTS_CHANGE:
+        case DVDNAV_CELL_CHANGE:
+            // チャプター移動・セル移動など
+            // FFmpeg のデコード状態をリセット
+            clearQueues();
+            avcodec_flush_buffers(decCtx);
+            if (audioCtx)
+                avcodec_flush_buffers(audioCtx);
+            break;
+
+        default:
+            // その他のイベントは無視
+            break;
+        }
     }
 
     void movePoint(int ms)
@@ -631,11 +708,24 @@ struct DVDPlayerStruct
 
     void skip(bool forward)
     {
+        if (isDvd && nav)
+        {
+            int offset = forward ? 1 : -1;
+
+            dvdnav_sector_search(nav, offset, SEEK_CUR);
+
+            clearQueues();
+            avcodec_flush_buffers(decCtx);
+            if (audioCtx)
+                avcodec_flush_buffers(audioCtx);
+
+            totalSamplesPlayed = 0;
+            return;
+        }
+
+        // 通常動画は従来の 10 秒スキップ
         int currentMs = (int)((double)totalSamplesPlayed.load() / 48000.0 * 1000.0);
-
-        // 10秒進む / 戻る
         int target = currentMs + (forward ? 10000 : -10000);
-
         movePoint(target);
     }
 
