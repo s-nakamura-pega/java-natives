@@ -21,7 +21,7 @@ public class MovieFrame extends JFrame {
 	private final JButton loadButton;
 	private final JSlider seekBar;
 	private boolean isSeekInnerUpdate = false;
-	private final Object lock = new Object();
+	private boolean isMovingPoint = false;
 
 	public MovieFrame() {
 		super("Movie Player");
@@ -84,13 +84,18 @@ public class MovieFrame extends JFrame {
 				return;
 			}
 			if (!seekBar.getValueIsAdjusting()) {
+				isMovingPoint = true;
 				int ms = seekBar.getValue();
 				canvas.movePoint(ms);
+				isMovingPoint = false;
 			}
 		});
 
 		// MovieCanvas → seekBar の同期
 		canvas.setPointRenderer(point -> {
+			if (isMovingPoint || seekBar.getValueIsAdjusting()) {
+				return;
+			}
 			isSeekInnerUpdate = true;
 			seekBar.setValue(point);
 			isSeekInnerUpdate = false;

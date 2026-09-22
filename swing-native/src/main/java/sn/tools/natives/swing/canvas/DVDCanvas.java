@@ -1,6 +1,8 @@
 package sn.tools.natives.swing.canvas;
 
 import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
@@ -140,7 +142,9 @@ public class DVDCanvas extends JComponent implements NativeDVDCanvas {
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
 		if (img != null) {
-
+			Graphics2D g2 = (Graphics2D) g;
+	        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+	                            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 			int cw = getWidth();
 			int ch = getHeight();
 
@@ -169,7 +173,7 @@ public class DVDCanvas extends JComponent implements NativeDVDCanvas {
 			int x = (cw - drawW) / 2;
 			int y = (ch - drawH) / 2;
 
-			g.drawImage(img, x, y, drawW, drawH, null);
+			g2.drawImage(img, x, y, drawW, drawH, null);
 			Toolkit.getDefaultToolkit().sync();
 		}
 	}

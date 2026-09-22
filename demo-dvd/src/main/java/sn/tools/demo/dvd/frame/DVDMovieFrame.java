@@ -24,6 +24,7 @@ public class DVDMovieFrame extends JFrame {
 	private final JButton loadButton;
 	private final JSlider seekBar;
 	private boolean isSeekInnerUpdate = false;
+	private boolean isMovingPoint = false;
 
 	public DVDMovieFrame() {
 		super("Movie Player");
@@ -95,13 +96,18 @@ public class DVDMovieFrame extends JFrame {
 				return;
 			}
 			if (!seekBar.getValueIsAdjusting()) {
+				isMovingPoint = true;
 				int ms = seekBar.getValue();
 				canvas.movePoint(ms);
+				isMovingPoint = false;
 			}
 		});
 
 		// MovieCanvas → seekBar の同期
 		canvas.setPointRenderer(point -> {
+			if (isMovingPoint || seekBar.getValueIsAdjusting()) {
+				return;
+			}
 			isSeekInnerUpdate = true;
 			seekBar.setValue(point);
 			isSeekInnerUpdate = false;

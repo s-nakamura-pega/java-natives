@@ -19,6 +19,75 @@ extern "C"
 #include <vector>
 #include <string>
 #include <jni.h>
+#include <algorithm>
+#include <fstream>
+#include <filesystem>
+namespace fs = std::filesystem;
+
+static std::vector<std::string> collectVobs(const std::string &videoTsPath)
+{
+    std::vector<std::string> list;
+
+    for (const auto &entry : fs::directory_iterator(videoTsPath))
+    {
+        if (!entry.is_regular_file())
+            continue;
+
+        std::string name = entry.path().filename().string();
+
+        if (name.size() >= 12 &&
+            name.substr(0, 4) == "VTS_" &&
+            name.substr(name.size() - 4) == ".VOB")
+        {
+            list.push_back(entry.path().string());
+        }
+    }
+
+    // VTS_XX_1.VOB → VTS_XX_2.VOB → ... の順にソート
+    std::sort(list.begin(), list.end());
+    return list;
+}
+
+static std::string makeConcatPath(const std::vector<std::string> &vobs)
+{
+    std::string concat = "concat:";
+    for (size_t i = 0; i < vobs.size(); i++)
+    {
+        concat += vobs[i];
+        if (i + 1 < vobs.size())
+            concat += "|";
+    }
+    return concat;
+}
+
+static inline std::string findMainVob(const std::string &videoTsPath)
+{
+    std::string bestFile;
+    uintmax_t bestSize = 0;
+
+    for (const auto &entry : fs::directory_iterator(videoTsPath))
+    {
+        if (!entry.is_regular_file())
+            continue;
+
+        std::string name = entry.path().filename().string();
+
+        // VTS_XX_Y.VOB のみ対象
+        if (name.size() >= 12 &&
+            name.substr(0, 4) == "VTS_" &&
+            name.substr(name.size() - 4) == ".VOB")
+        {
+            uintmax_t size = entry.file_size();
+            if (size > bestSize)
+            {
+                bestSize = size;
+                bestFile = entry.path().string();
+            }
+        }
+    }
+
+    return bestFile;
+}
 
 // ------------------------------
 // PortAudio 自動デバイス選択
@@ -58,13 +127,22 @@ static inline int chooseBestAudioDevice()
 // ------------------------------
 // DVD 判定
 // ------------------------------
-bool isDVDPath(const char *path)
+static inline bool isVideoTsDirectory(const std::string &path)
 {
-    std::string p(path ? path : "");
-    if (p.size() >= 4 && p.substr(p.size() - 4) == ".iso")
+    namespace fs = std::filesystem;
+
+    if (!fs::is_directory(path))
+        return false;
+
+    // VIDEO_TS ディレクトリ名かどうか
+    std::string name = fs::path(path).filename().string();
+    if (name == "VIDEO_TS")
         return true;
-    if (p.find("VIDEO_TS") != std::string::npos)
+
+    // パスの中に VIDEO_TS が含まれる場合も許可
+    if (path.find("VIDEO_TS") != std::string::npos)
         return true;
+
     return false;
 }
 
@@ -123,8 +201,7 @@ struct DVDPlayerStruct
     jobject javaCanvasObj = nullptr;
     std::mutex fmtMutex;
 
-    DVDPlayerStruct(JavaVM *vm, jobject canvasObj)
-        : jvm(vm)
+    DVDPlayerStruct(JavaVM *vm, jobject canvasObj) : jvm(vm)
     {
         avformat_network_init();
         Pa_Initialize();
@@ -138,15 +215,6 @@ struct DVDPlayerStruct
     ~DVDPlayerStruct()
     {
         stop();
-
-        if (paStream)
-        {
-            Pa_StopStream(paStream);
-            Pa_CloseStream(paStream);
-            paStream = nullptr;
-        }
-        Pa_Terminate();
-
         if (javaCanvasObj)
         {
             JNIEnv *env = nullptr;
@@ -154,9 +222,135 @@ struct DVDPlayerStruct
             env->DeleteGlobalRef(javaCanvasObj);
             jvm->DetachCurrentThread();
         }
-
         clearQueues();
         freeContexts();
+        Pa_Terminate();
+    }
+
+    long openAsNormalVideo(const char *file, bool isConcat)
+    {
+        const AVInputFormat *iformat = nullptr;
+
+        if (isConcat)
+        {
+            iformat = av_find_input_format("concat");
+            if (!iformat)
+            {
+                std::cout << "[native] concat demuxer not found" << std::endl;
+                return -1;
+            }
+        }
+
+        if (avformat_open_input(&fmtCtx, file, iformat, nullptr) < 0)
+            return -1;
+
+        fmtCtx->flags |= AVFMT_FLAG_NONBLOCK;
+
+        if (avformat_find_stream_info(fmtCtx, nullptr) < 0)
+            return -1;
+
+        videoStreamIndex = -1;
+        audioStreamIndex = -1;
+
+        for (unsigned i = 0; i < fmtCtx->nb_streams; ++i)
+        {
+            auto *st = fmtCtx->streams[i];
+            if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && videoStreamIndex < 0)
+            {
+                videoStreamIndex = i;
+                videoStream = st;
+            }
+            else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audioStreamIndex < 0)
+            {
+                audioStreamIndex = i;
+                audioStream = st;
+            }
+        }
+
+        if (videoStreamIndex < 0)
+            return -1;
+
+        // --- video codec ---
+        const AVCodec *dec = avcodec_find_decoder(videoStream->codecpar->codec_id);
+        decCtx = avcodec_alloc_context3(dec);
+        avcodec_parameters_to_context(decCtx, videoStream->codecpar);
+        avcodec_open2(decCtx, dec, nullptr);
+
+        frameWidth = decCtx->width;
+        frameHeight = decCtx->height;
+
+        swsCtx = sws_getContext(
+            frameWidth, frameHeight, decCtx->pix_fmt,
+            frameWidth, frameHeight, AV_PIX_FMT_RGB24,
+            SWS_BILINEAR, nullptr, nullptr, nullptr);
+
+        frameBuffer.resize(frameWidth * frameHeight * 3);
+
+        // --- audio codec ---
+        if (audioStreamIndex >= 0)
+        {
+            const AVCodec *adec = avcodec_find_decoder(audioStream->codecpar->codec_id);
+            audioCtx = avcodec_alloc_context3(adec);
+            avcodec_parameters_to_context(audioCtx, audioStream->codecpar);
+            avcodec_open2(audioCtx, adec, nullptr);
+
+            AVChannelLayout outLayout;
+            av_channel_layout_default(&outLayout, 2);
+
+            swrCtx = swr_alloc();
+            swr_alloc_set_opts2(
+                &swrCtx,
+                &outLayout,
+                AV_SAMPLE_FMT_S16,
+                48000,
+                &audioCtx->ch_layout,
+                audioCtx->sample_fmt,
+                audioCtx->sample_rate,
+                0,
+                nullptr);
+            swr_init(swrCtx);
+
+            int dev = chooseBestAudioDevice();
+
+            PaStreamParameters outParams;
+            outParams.device = dev;
+            outParams.channelCount = 2;
+            outParams.sampleFormat = paInt16;
+            outParams.suggestedLatency =
+                Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
+            outParams.hostApiSpecificStreamInfo = nullptr;
+
+            Pa_OpenStream(
+                &paStream,
+                nullptr,
+                &outParams,
+                48000,
+                1024,
+                paClipOff,
+                nullptr,
+                nullptr);
+
+            Pa_StartStream(paStream);
+        }
+
+        if (fmtCtx->duration != AV_NOPTS_VALUE)
+            durationMs = fmtCtx->duration / (AV_TIME_BASE / 1000);
+        else
+            durationMs = -1;
+
+        decodeReady = true;
+
+        // Java に canvas サイズ通知
+        {
+            JNIEnv *env = nullptr;
+            jvm->AttachCurrentThread((void **)&env, nullptr);
+            jclass cls = env->GetObjectClass(javaCanvasObj);
+            jmethodID mid = env->GetMethodID(cls, "initCanvas", "(II)V");
+            env->CallVoidMethod(javaCanvasObj, mid, frameWidth, frameHeight);
+            jvm->DetachCurrentThread();
+        }
+
+        return durationMs;
     }
 
     void clearQueues()
@@ -234,131 +428,38 @@ struct DVDPlayerStruct
         stop();
         freeContexts();
 
-        isDvd = isDVDPath(path);
-        if (isDvd)
-        {
-            if (dvdnav_open(&nav, path) != DVDNAV_STATUS_OK)
-            {
-                nav = nullptr;
-                isDvd = false;
-            }
-            else
-            {
-                dvdnav_set_readahead_flag(nav, 1);
-                dvdnav_set_PGC_positioning_flag(nav, 1);
-            }
-        }
+        std::string p(path);
 
-        if (avformat_open_input(&fmtCtx, path, nullptr, nullptr) < 0)
+        if (!isVideoTsDirectory(p))
+        {
+            std::cout << "[native] Not a VIDEO_TS directory" << std::endl;
             return -1;
-        fmtCtx->flags |= AVFMT_FLAG_NONBLOCK;
-        if (avformat_find_stream_info(fmtCtx, nullptr) < 0)
+        }
+
+        auto vobs = collectVobs(p);
+        if (vobs.empty())
+        {
+            std::cout << "[native] No VOB found" << std::endl;
             return -1;
-
-        videoStreamIndex = -1;
-        audioStreamIndex = -1;
-        videoStream = nullptr;
-        audioStream = nullptr;
-
-        for (unsigned i = 0; i < fmtCtx->nb_streams; ++i)
-        {
-            auto *st = fmtCtx->streams[i];
-            if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && videoStreamIndex < 0)
-            {
-                videoStreamIndex = i;
-                videoStream = st;
-            }
-            else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audioStreamIndex < 0)
-            {
-                audioStreamIndex = i;
-                audioStream = st;
-            }
-        }
-        if (videoStreamIndex < 0)
-            return -1;
-
-        // video codec
-        {
-            const AVCodec *dec = avcodec_find_decoder(videoStream->codecpar->codec_id);
-            decCtx = avcodec_alloc_context3(dec);
-            avcodec_parameters_to_context(decCtx, videoStream->codecpar);
-            avcodec_open2(decCtx, dec, nullptr);
-
-            frameWidth = decCtx->width;
-            frameHeight = decCtx->height;
-
-            swsCtx = sws_getContext(
-                frameWidth, frameHeight, decCtx->pix_fmt,
-                frameWidth, frameHeight, AV_PIX_FMT_RGB24,
-                SWS_BILINEAR, nullptr, nullptr, nullptr);
-
-            frameBuffer.resize(frameWidth * frameHeight * 3);
         }
 
-        // audio codec
-        if (audioStreamIndex >= 0)
+        // --- VOB を連結して巨大ファイルを作る ---
+        std::string merged = p + "/merged.vob";
+        std::ofstream out(merged, std::ios::binary);
+
+        for (auto &v : vobs)
         {
-            const AVCodec *adec = avcodec_find_decoder(audioStream->codecpar->codec_id);
-            audioCtx = avcodec_alloc_context3(adec);
-            avcodec_parameters_to_context(audioCtx, audioStream->codecpar);
-            avcodec_open2(audioCtx, adec, nullptr);
-
-            AVChannelLayout outLayout;
-            av_channel_layout_default(&outLayout, 2);
-
-            swrCtx = swr_alloc();
-            swr_alloc_set_opts2(
-                &swrCtx,
-                &outLayout,
-                AV_SAMPLE_FMT_S16,
-                48000,
-                &audioCtx->ch_layout,
-                audioCtx->sample_fmt,
-                audioCtx->sample_rate,
-                0,
-                nullptr);
-            swr_init(swrCtx);
-
-            int dev = chooseBestAudioDevice();
-
-            PaStreamParameters outParams;
-            outParams.device = dev;
-            outParams.channelCount = 2;
-            outParams.sampleFormat = paInt16;
-            outParams.suggestedLatency =
-                Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
-            outParams.hostApiSpecificStreamInfo = nullptr;
-
-            Pa_OpenStream(
-                &paStream,
-                nullptr,
-                &outParams,
-                48000,
-                1024,
-                paClipOff,
-                nullptr,
-                nullptr);
-
-            Pa_StartStream(paStream);
+            std::ifstream in(v, std::ios::binary);
+            out << in.rdbuf();
+            in.close();
         }
+        out.close();
 
-        if (fmtCtx->duration != AV_NOPTS_VALUE)
-            durationMs = fmtCtx->duration / (AV_TIME_BASE / 1000);
-        else
-            durationMs = -1;
+        std::cout << "[native] merged VOB: " << merged << std::endl;
 
-        decodeReady = true;
+        isDvd = false;
 
-        {
-            JNIEnv *env = nullptr;
-            jvm->AttachCurrentThread((void **)&env, nullptr);
-            jclass cls = env->GetObjectClass(javaCanvasObj);
-            jmethodID mid = env->GetMethodID(cls, "initCanvas", "(II)V");
-            env->CallVoidMethod(javaCanvasObj, mid, frameWidth, frameHeight);
-            jvm->DetachCurrentThread();
-        }
-
-        return durationMs;
+        return openAsNormalVideo(merged.c_str(), false);
     }
 
     void mediaThreadsRun()
