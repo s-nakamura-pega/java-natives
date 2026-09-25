@@ -21,7 +21,7 @@ extern "C"
 // ------------------------------
 // PortAudio 自動デバイス選択
 // ------------------------------
-int chooseBestAudioDevice()
+static inline int chooseBestAudioDevice()
 {
     int numDevices = Pa_GetDeviceCount();
     if (numDevices < 0)
@@ -98,6 +98,8 @@ struct PlayerStruct
 
     // audio clock（音声の再生位置）
     std::atomic<long> totalSamplesPlayed{0};
+
+    int sampleRate = 48000;
 
     // Java
     JavaVM *jvm = nullptr;
@@ -267,14 +269,17 @@ struct PlayerStruct
             av_channel_layout_default(&outLayout, 2);
 
             swrCtx = swr_alloc();
+
+            sampleRate = audioCtx->sample_rate;
+
             swr_alloc_set_opts2(
                 &swrCtx,
                 &outLayout,
                 AV_SAMPLE_FMT_S16,
-                48000,
+                sampleRate,
                 &audioCtx->ch_layout,
                 audioCtx->sample_fmt,
-                audioCtx->sample_rate,
+                sampleRate,
                 0,
                 nullptr);
             swr_init(swrCtx);
@@ -293,8 +298,8 @@ struct PlayerStruct
                 &paStream,
                 nullptr,
                 &outParams,
-                48000,
-                1024,
+                sampleRate,
+                audioCtx->frame_size,
                 paClipOff,
                 nullptr,
                 nullptr);
@@ -344,12 +349,14 @@ struct PlayerStruct
             AVFrame *rgbFrame = av_frame_alloc();
 
             rgbFrame->format = AV_PIX_FMT_RGB24;
-            rgbFrame->width  = frameWidth;
+            rgbFrame->width = frameWidth;
             rgbFrame->height = frameHeight;
             av_frame_get_buffer(rgbFrame, 32);
 
-            while (running) {
-                if (!playing) {
+            while (running)
+            {
+                if (!playing)
+                {
                     std::this_thread::sleep_for(std::chrono::milliseconds(5));
                     continue;
                 }
@@ -357,38 +364,44 @@ struct PlayerStruct
                 AVPacket *pkt = nullptr;
                 {
                     std::lock_guard<std::mutex> lock(queueMutex);
-                    if (!videoQueue.empty()) {
+                    if (!videoQueue.empty())
+                    {
                         pkt = videoQueue.front();
                         videoQueue.pop();
                     }
                 }
 
-                if (!pkt) {
+                if (!pkt)
+                {
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
                     continue;
                 }
 
                 avcodec_send_packet(decCtx, pkt);
 
-                while (avcodec_receive_frame(decCtx, frame) == 0) {
+                while (avcodec_receive_frame(decCtx, frame) == 0)
+                {
 
-                    double pts_ms = 0.0;
-                    if (frame->pts != AV_NOPTS_VALUE)
-                        pts_ms = frame->pts * av_q2d(videoStream->time_base) * 1000.0;
-
-                    double audioClockMs =
-                        (double)totalSamplesPlayed.load() / 48000.0 * 1000.0;
+                    double pts_ms = frame->pts * av_q2d(videoStream->time_base) * 1000.0;
+                    double audioClockMs = (double)totalSamplesPlayed / (double)sampleRate * 1000.0;
 
                     double diff = pts_ms - audioClockMs;
 
-                    // 映像が少し早いときだけ、最大 50ms まで待つ
-                    if (diff > 5 && diff < 50) {
-                        std::this_thread::sleep_for(
-                            std::chrono::milliseconds((long)diff));
+                    // 映像が遅れている → 先送り（デコードを進める）
+                    if (diff < 0)
+                    {
+                        std::cout << "[native] video break" << std::endl;
+                        // ★ 描画せず、次のフレームを取りに行く
+                        break;
                     }
-                    // 極端に遅れているときだけ、軽くスキップ
-                    else if (diff < -100) {
-                        continue;
+
+                    // 映像が先行 → 最大50ms待つ
+                    if (diff > 0)
+                    {
+                        long waitMs = (long)diff;
+                        if (waitMs > 50)
+                            waitMs = 50;
+                        std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
                     }
 
                     jclass clsLocal = env->GetObjectClass(javaCanvasObj);
@@ -399,8 +412,7 @@ struct PlayerStruct
                         swsCtx,
                         frame->data, frame->linesize,
                         0, frameHeight,
-                        rgbFrame->data, rgbFrame->linesize
-                    );
+                        rgbFrame->data, rgbFrame->linesize);
 
                     {
                         std::lock_guard<std::mutex> lock(frameMutex);
@@ -413,7 +425,7 @@ struct PlayerStruct
                     std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }
 
-                av_packet_free(&pkt);
+            av_packet_free(&pkt);
             }
 
             av_frame_free(&rgbFrame);
@@ -422,7 +434,8 @@ struct PlayerStruct
             jvm->DetachCurrentThread(); });
     }
 
-    void audioThreadRun()
+    void
+    audioThreadRun()
     {
         audioThread = std::thread([this]()
                                   {
@@ -582,9 +595,9 @@ struct PlayerStruct
 
         clearQueues();
 
-        long samplesAtSeek =
-            (long)((double)ms / 1000.0 * 48000.0);
+        long samplesAtSeek = (long)((double)ms / 1000.0 * (double)sampleRate);
         totalSamplesPlayed = samplesAtSeek;
+        start();
     }
 
     bool isDecodeReady() const

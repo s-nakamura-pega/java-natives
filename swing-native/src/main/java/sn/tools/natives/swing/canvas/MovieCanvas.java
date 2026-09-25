@@ -35,7 +35,6 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 	public MovieCanvas() {
 		super();
 		NativeLoader.load("swing.component.movie");
-		handleId = create();
 	}
 
 	@Override
@@ -156,6 +155,12 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 			g2.drawImage(img, x, y, drawW, drawH, null);
 			Toolkit.getDefaultToolkit().sync();
 		}
+	}
+
+	@Override
+	public void addNotify() {
+		super.addNotify();
+		handleId = create();
 	}
 
 	@Override

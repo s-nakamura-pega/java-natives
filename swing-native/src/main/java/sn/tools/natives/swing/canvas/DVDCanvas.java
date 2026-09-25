@@ -37,23 +37,6 @@ public class DVDCanvas extends JComponent implements NativeDVDCanvas {
 	public DVDCanvas() {
 		super();
 		NativeLoader.load("swing.component.movie");
-		handleId = create();
-		addKeyListener(new KeyListener() {
-
-			@Override
-			public void keyTyped(KeyEvent e) {
-			}
-
-			@Override
-			public void keyReleased(KeyEvent e) {
-			}
-
-			@Override
-			public void keyPressed(KeyEvent e) {
-				sendKey(e.getKeyCode());
-			}
-
-		});
 		setFocusable(true);
 		requestFocusInWindow();
 	}
@@ -143,8 +126,7 @@ public class DVDCanvas extends JComponent implements NativeDVDCanvas {
 		super.paintComponent(g);
 		if (img != null) {
 			Graphics2D g2 = (Graphics2D) g;
-	        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-	                            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 			int cw = getWidth();
 			int ch = getHeight();
 
@@ -176,6 +158,28 @@ public class DVDCanvas extends JComponent implements NativeDVDCanvas {
 			g2.drawImage(img, x, y, drawW, drawH, null);
 			Toolkit.getDefaultToolkit().sync();
 		}
+	}
+
+	@Override
+	public void addNotify() {
+		super.addNotify();
+		handleId = create();
+		addKeyListener(new KeyListener() {
+
+			@Override
+			public void keyTyped(KeyEvent e) {
+			}
+
+			@Override
+			public void keyReleased(KeyEvent e) {
+			}
+
+			@Override
+			public void keyPressed(KeyEvent e) {
+				sendKey(e.getKeyCode());
+			}
+
+		});
 	}
 
 	@Override
