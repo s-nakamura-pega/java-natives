@@ -388,15 +388,14 @@ struct PlayerStruct
                     double diff = pts_ms - audioClockMs;
 
                     // 映像が遅れている → 先送り（デコードを進める）
-                    if (diff < 0)
+                    if (diff < -1)
                     {
-                        std::cout << "[native] video break" << std::endl;
                         // ★ 描画せず、次のフレームを取りに行く
                         break;
                     }
 
                     // 映像が先行 → 最大50ms待つ
-                    if (diff > 0)
+                    if (diff > 1)
                     {
                         long waitMs = (long)diff;
                         if (waitMs > 50)
@@ -422,7 +421,7 @@ struct PlayerStruct
 
                     env->CallVoidMethod(javaCanvasObj, repaintMid);
 
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }
 
             av_packet_free(&pkt);
@@ -469,9 +468,14 @@ struct PlayerStruct
                 avcodec_send_packet(audioCtx, pkt);
 
                 while (avcodec_receive_frame(audioCtx, frame) == 0) {
+                    // ★ audio frame の PTS を ms に変換
+                    double pts_ms = frame->pts * av_q2d(audioStream->time_base) * 1000.0;
+
+                    // ★ PTS をサンプル数に変換して totalSamplesPlayed を上書き
+                    long samplesByPTS = (long)(pts_ms / 1000.0 * sampleRate);
+                    totalSamplesPlayed = samplesByPTS;
                     uint8_t *outData[] = {
-                        reinterpret_cast<uint8_t *>(pcmBuf.data())
-                    };
+                        reinterpret_cast<uint8_t *>(pcmBuf.data())};
 
                     int outSamples = swr_convert(
                         swrCtx,
@@ -483,7 +487,6 @@ struct PlayerStruct
 
                     if (outSamples > 0) {
                         Pa_WriteStream(paStream, pcmBuf.data(), outSamples);
-                        totalSamplesPlayed += outSamples;
                     }
                 }
                 av_packet_free(&pkt);
@@ -595,8 +598,7 @@ struct PlayerStruct
 
         clearQueues();
 
-        long samplesAtSeek = (long)((double)ms / 1000.0 * (double)sampleRate);
-        totalSamplesPlayed = samplesAtSeek;
+        totalSamplesPlayed = 0;
         start();
     }
 
