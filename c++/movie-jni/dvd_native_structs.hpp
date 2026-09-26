@@ -1,344 +1,149 @@
 #pragma once
 
-extern "C"
-{
-#include <libavformat/avformat.h>
-#include <libavcodec/avcodec.h>
-#include <libswscale/swscale.h>
-#include <libswresample/swresample.h>
-#include <dvdnav/dvdnav.h>
-}
-#include <chrono>
-#include <portaudio.h>
-#include <iostream>
-#include <cstring>
-#include <thread>
-#include <atomic>
+#include <vlc/vlc.h>
+#include <jni.h>
 #include <mutex>
-#include <queue>
 #include <vector>
 #include <string>
-#include <jni.h>
-#include <algorithm>
-#include <fstream>
-#include <filesystem>
-namespace fs = std::filesystem;
+#include <atomic>
+#include <iostream>
+#include <cstring>
 
-static std::vector<std::string> collectVobs(const std::string &videoTsPath)
-{
-    std::vector<std::string> list;
-
-    for (const auto &entry : fs::directory_iterator(videoTsPath))
-    {
-        if (!entry.is_regular_file())
-            continue;
-
-        std::string name = entry.path().filename().string();
-
-        if (name.size() >= 12 &&
-            name.substr(0, 4) == "VTS_" &&
-            name.substr(name.size() - 4) == ".VOB")
-        {
-            list.push_back(entry.path().string());
-        }
-    }
-
-    // VTS_XX_1.VOB → VTS_XX_2.VOB → ... の順にソート
-    std::sort(list.begin(), list.end());
-    return list;
-}
-
-static std::string makeConcatPath(const std::vector<std::string> &vobs)
-{
-    std::string concat = "concat:";
-    for (size_t i = 0; i < vobs.size(); i++)
-    {
-        concat += vobs[i];
-        if (i + 1 < vobs.size())
-            concat += "|";
-    }
-    return concat;
-}
-
-static inline std::string findMainVob(const std::string &videoTsPath)
-{
-    std::string bestFile;
-    uintmax_t bestSize = 0;
-
-    for (const auto &entry : fs::directory_iterator(videoTsPath))
-    {
-        if (!entry.is_regular_file())
-            continue;
-
-        std::string name = entry.path().filename().string();
-
-        // VTS_XX_Y.VOB のみ対象
-        if (name.size() >= 12 &&
-            name.substr(0, 4) == "VTS_" &&
-            name.substr(name.size() - 4) == ".VOB")
-        {
-            uintmax_t size = entry.file_size();
-            if (size > bestSize)
-            {
-                bestSize = size;
-                bestFile = entry.path().string();
-            }
-        }
-    }
-
-    return bestFile;
-}
-
-// ------------------------------
-// PortAudio 自動デバイス選択
-// ------------------------------
-static inline int chooseBestAudioDevice()
-{
-    int numDevices = Pa_GetDeviceCount();
-    if (numDevices < 0)
-        return -1;
-
-    int best = -1;
-
-    for (int i = 0; i < numDevices; i++)
-    {
-        const PaDeviceInfo *info = Pa_GetDeviceInfo(i);
-
-        if (info->maxOutputChannels <= 0)
-            continue;
-
-        if (strstr(info->name, "cards.pcm") != nullptr)
-            continue;
-        if (strstr(info->name, "default") != nullptr)
-            continue;
-        if (strstr(info->name, "sysdefault") != nullptr)
-            continue;
-
-        best = i;
-        break;
-    }
-
-    if (best < 0)
-        best = Pa_GetDefaultOutputDevice();
-
-    return best;
-}
-
-// ------------------------------
-// DVD 判定
-// ------------------------------
-static inline bool isVideoTsDirectory(const std::string &path)
-{
-    namespace fs = std::filesystem;
-
-    if (!fs::is_directory(path))
-        return false;
-
-    // VIDEO_TS ディレクトリ名かどうか
-    std::string name = fs::path(path).filename().string();
-    if (name == "VIDEO_TS")
-        return true;
-
-    // パスの中に VIDEO_TS が含まれる場合も許可
-    if (path.find("VIDEO_TS") != std::string::npos)
-        return true;
-
-    return false;
-}
-
-// ------------------------------
-// DVDPlayerStruct 本体
-// ------------------------------
 struct DVDPlayerStruct
 {
-    // FFmpeg core
-    AVFormatContext *fmtCtx = nullptr;
+    libvlc_instance_t *vlc = nullptr;
+    libvlc_media_player_t *mp = nullptr;
+    libvlc_media_t *media = nullptr;
 
-    // video
-    AVCodecContext *decCtx = nullptr;
-    AVStream *videoStream = nullptr;
-    int videoStreamIndex = -1;
-    SwsContext *swsCtx = nullptr;
-
-    // audio
-    AVCodecContext *audioCtx = nullptr;
-    AVStream *audioStream = nullptr;
-    int audioStreamIndex = -1;
-    SwrContext *swrCtx = nullptr;
-    PaStream *paStream = nullptr;
-
-    // DVD navigation
-    dvdnav_t *nav = nullptr;
-    bool isDvd = false;
-
-    // threads
-    std::thread readThread;
-    std::thread videoThread;
-    std::thread audioThread;
-    std::atomic<bool> running{false};
-    std::atomic<bool> playing{false};
-    std::atomic<bool> decodeReady{false};
-
-    // packet queues
-    std::queue<AVPacket *> videoQueue;
-    std::queue<AVPacket *> audioQueue;
-    std::mutex queueMutex;
-
-    // frame buffer (RGB24)
-    std::mutex frameMutex;
-    std::vector<uint8_t> frameBuffer;
-    int frameWidth = 0;
-    int frameHeight = 0;
-
-    // duration
-    long durationMs = -1;
-
-    // audio clock（音声の再生位置）
-    std::atomic<long> totalSamplesPlayed{0};
-
-    // Java
     JavaVM *jvm = nullptr;
     jobject javaCanvasObj = nullptr;
-    std::mutex fmtMutex;
 
-    DVDPlayerStruct(JavaVM *vm, jobject canvasObj) : jvm(vm)
+    std::mutex frameMutex;
+    std::vector<uint8_t> frameBuffer;
+
+    int frameWidth = 720;
+    int frameHeight = 480;
+
+    std::atomic<bool> decodeReady{false};
+    std::atomic<bool> playing{false};
+
+    DVDPlayerStruct(JavaVM *vm, jobject canvasObj)
+        : jvm(vm)
     {
-        avformat_network_init();
-        Pa_Initialize();
-
         JNIEnv *env = nullptr;
         jvm->AttachCurrentThread((void **)&env, nullptr);
         javaCanvasObj = env->NewGlobalRef(canvasObj);
         jvm->DetachCurrentThread();
+
+        const char *args[] = {
+            "--no-video-title-show",
+            "--quiet",
+            "--no-sub-autodetect-file"};
+        vlc = libvlc_new(3, args);
     }
 
     ~DVDPlayerStruct()
     {
         stop();
+
+        if (mp)
+        {
+            libvlc_media_player_release(mp);
+            mp = nullptr;
+        }
+        if (media)
+        {
+            libvlc_media_release(media);
+            media = nullptr;
+        }
+        if (vlc)
+        {
+            libvlc_release(vlc);
+            vlc = nullptr;
+        }
+
         if (javaCanvasObj)
         {
             JNIEnv *env = nullptr;
             jvm->AttachCurrentThread((void **)&env, nullptr);
             env->DeleteGlobalRef(javaCanvasObj);
             jvm->DetachCurrentThread();
+            javaCanvasObj = nullptr;
         }
-        clearQueues();
-        freeContexts();
-        Pa_Terminate();
     }
 
-    long openAsNormalVideo(const char *file, bool isConcat)
+    // ==========================
+    // libVLC callbacks
+    // ==========================
+    static void *lock(void *opaque, void **planes)
     {
-        const AVInputFormat *iformat = nullptr;
+        auto *self = static_cast<DVDPlayerStruct *>(opaque);
+        std::lock_guard<std::mutex> lock(self->frameMutex);
+        *planes = self->frameBuffer.data();
+        return nullptr;
+    }
 
-        if (isConcat)
+    static void unlock(void *opaque, void *picture, void *const *planes)
+    {
+    }
+
+    static void display(void *opaque, void *picture)
+    {
+        auto *self = static_cast<DVDPlayerStruct *>(opaque);
+
+        JNIEnv *env = nullptr;
+        self->jvm->AttachCurrentThread((void **)&env, nullptr);
+
+        jclass cls = env->GetObjectClass(self->javaCanvasObj);
+        jmethodID mid = env->GetMethodID(cls, "repaintCallback", "()V");
+        env->CallVoidMethod(self->javaCanvasObj, mid);
+
+        self->jvm->DetachCurrentThread();
+    }
+
+    // ==========================
+    // setFile（完全修正版）
+    // ==========================
+    long setFile(const char *path)
+    {
+        decodeReady = false;
+        stop();
+
+        // 古い mp/media を完全破棄
+        if (mp)
         {
-            iformat = av_find_input_format("concat");
-            if (!iformat)
-            {
-                std::cout << "[native] concat demuxer not found" << std::endl;
-                return -1;
-            }
+            libvlc_media_player_release(mp);
+            mp = nullptr;
+        }
+        if (media)
+        {
+            libvlc_media_release(media);
+            media = nullptr;
         }
 
-        if (avformat_open_input(&fmtCtx, file, iformat, nullptr) < 0)
-            return -1;
+        // 新しい mp
+        mp = libvlc_media_player_new(vlc);
 
-        fmtCtx->flags |= AVFMT_FLAG_NONBLOCK;
-
-        if (avformat_find_stream_info(fmtCtx, nullptr) < 0)
-            return -1;
-
-        videoStreamIndex = -1;
-        audioStreamIndex = -1;
-
-        for (unsigned i = 0; i < fmtCtx->nb_streams; ++i)
-        {
-            auto *st = fmtCtx->streams[i];
-            if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && videoStreamIndex < 0)
-            {
-                videoStreamIndex = i;
-                videoStream = st;
-            }
-            else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audioStreamIndex < 0)
-            {
-                audioStreamIndex = i;
-                audioStream = st;
-            }
-        }
-
-        if (videoStreamIndex < 0)
-            return -1;
-
-        // --- video codec ---
-        const AVCodec *dec = avcodec_find_decoder(videoStream->codecpar->codec_id);
-        decCtx = avcodec_alloc_context3(dec);
-        avcodec_parameters_to_context(decCtx, videoStream->codecpar);
-        avcodec_open2(decCtx, dec, nullptr);
-
-        frameWidth = decCtx->width;
-        frameHeight = decCtx->height;
-
-        swsCtx = sws_getContext(
-            frameWidth, frameHeight, decCtx->pix_fmt,
-            frameWidth, frameHeight, AV_PIX_FMT_RGB24,
-            SWS_BILINEAR, nullptr, nullptr, nullptr);
-
+        // callbacks 先に設定
         frameBuffer.resize(frameWidth * frameHeight * 3);
+        libvlc_video_set_callbacks(mp, lock, unlock, display, this);
+        libvlc_video_set_format(mp, "RV24", frameWidth, frameHeight, frameWidth * 3);
 
-        // --- audio codec ---
-        if (audioStreamIndex >= 0)
-        {
-            const AVCodec *adec = avcodec_find_decoder(audioStream->codecpar->codec_id);
-            audioCtx = avcodec_alloc_context3(adec);
-            avcodec_parameters_to_context(audioCtx, audioStream->codecpar);
-            avcodec_open2(audioCtx, adec, nullptr);
+        // DVD メディア作成（場所は常に "dvd://"）
+        media = libvlc_media_new_location(vlc, "dvd://");
+        if (!media)
+            return -1;
 
-            AVChannelLayout outLayout;
-            av_channel_layout_default(&outLayout, 2);
+        // 実際のデバイス/ディレクトリをオプションで渡す
+        // path は "/run/media/.../SONIC_THE_HEDGEHOG" か "…/VIDEO_TS" を想定
+        std::string opt = std::string("dvd-device=") + path;
+        libvlc_media_add_option(media, opt.c_str());
 
-            swrCtx = swr_alloc();
-            swr_alloc_set_opts2(
-                &swrCtx,
-                &outLayout,
-                AV_SAMPLE_FMT_S16,
-                48000,
-                &audioCtx->ch_layout,
-                audioCtx->sample_fmt,
-                audioCtx->sample_rate,
-                0,
-                nullptr);
-            swr_init(swrCtx);
+        // 必要ならメニューから開始したい場合
+        // libvlc_media_add_option(media, "dvdnav-menu=1");
 
-            int dev = chooseBestAudioDevice();
-
-            PaStreamParameters outParams;
-            outParams.device = dev;
-            outParams.channelCount = 2;
-            outParams.sampleFormat = paInt16;
-            outParams.suggestedLatency =
-                Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
-            outParams.hostApiSpecificStreamInfo = nullptr;
-
-            Pa_OpenStream(
-                &paStream,
-                nullptr,
-                &outParams,
-                48000,
-                1024,
-                paClipOff,
-                nullptr,
-                nullptr);
-
-            Pa_StartStream(paStream);
-        }
-
-        if (fmtCtx->duration != AV_NOPTS_VALUE)
-            durationMs = fmtCtx->duration / (AV_TIME_BASE / 1000);
-        else
-            durationMs = -1;
-
-        decodeReady = true;
+        // mp に media をセット
+        libvlc_media_player_set_media(mp, media);
 
         // Java に canvas サイズ通知
         {
@@ -350,534 +155,95 @@ struct DVDPlayerStruct
             jvm->DetachCurrentThread();
         }
 
-        return durationMs;
+        decodeReady = true;
+        return 0;
     }
 
-    void clearQueues()
+    // ==========================
+    // stop（完全修正版）
+    // ==========================
+    void stop()
     {
-        std::lock_guard<std::mutex> lock(queueMutex);
-        while (!videoQueue.empty())
+        playing = false;
+
+        if (mp)
         {
-            AVPacket *p = videoQueue.front();
-            videoQueue.pop();
-            av_packet_free(&p);
+            // 再生停止
+            libvlc_media_player_stop(mp);
+
+            // コールバック無効化
+            libvlc_video_set_callbacks(mp, nullptr, nullptr, nullptr, nullptr);
+            libvlc_video_set_format(mp, nullptr, 0, 0, 0);
+
+            decodeReady = false;
+
+            std::lock_guard<std::mutex> lock(frameMutex);
+            frameBuffer.clear();
         }
-        while (!audioQueue.empty())
-        {
-            AVPacket *p = audioQueue.front();
-            audioQueue.pop();
-            av_packet_free(&p);
-        }
-    }
-
-    void threadWait()
-    {
-        if (readThread.joinable())
-            readThread.join();
-        if (videoThread.joinable())
-            videoThread.join();
-        if (audioThread.joinable())
-            audioThread.join();
-    }
-
-    void freeContexts()
-    {
-        if (paStream)
-        {
-            Pa_StopStream(paStream);
-            Pa_CloseStream(paStream);
-            paStream = nullptr;
-        }
-        if (swsCtx)
-        {
-            sws_freeContext(swsCtx);
-            swsCtx = nullptr;
-        }
-        if (swrCtx)
-        {
-            swr_free(&swrCtx);
-            swrCtx = nullptr;
-        }
-        if (decCtx)
-        {
-            avcodec_free_context(&decCtx);
-            decCtx = nullptr;
-        }
-        if (audioCtx)
-        {
-            avcodec_free_context(&audioCtx);
-            audioCtx = nullptr;
-        }
-        if (fmtCtx)
-        {
-            avformat_close_input(&fmtCtx);
-            fmtCtx = nullptr;
-        }
-        if (nav)
-        {
-            dvdnav_close(nav);
-            nav = nullptr;
-        }
-        isDvd = false;
-    }
-
-    long setFile(const char *path)
-    {
-        decodeReady = false;
-
-        stop();
-        freeContexts();
-
-        std::string p(path);
-
-        if (!isVideoTsDirectory(p))
-        {
-            std::cout << "[native] Not a VIDEO_TS directory" << std::endl;
-            return -1;
-        }
-
-        auto vobs = collectVobs(p);
-        if (vobs.empty())
-        {
-            std::cout << "[native] No VOB found" << std::endl;
-            return -1;
-        }
-
-        // --- VOB を連結して巨大ファイルを作る ---
-        std::string merged = p + "/merged.vob";
-        std::ofstream out(merged, std::ios::binary);
-
-        for (auto &v : vobs)
-        {
-            std::ifstream in(v, std::ios::binary);
-            out << in.rdbuf();
-            in.close();
-        }
-        out.close();
-
-        std::cout << "[native] merged VOB: " << merged << std::endl;
-
-        isDvd = false;
-
-        return openAsNormalVideo(merged.c_str(), false);
-    }
-
-    void mediaThreadsRun()
-    {
-        running = true;
-        readThreadRun();
-        videoThreadRun();
-        audioThreadRun();
-    }
-
-    void videoThreadRun()
-    {
-        videoThread = std::thread([this]()
-                                  {
-            JNIEnv *env = nullptr;
-            jvm->AttachCurrentThread((void **)&env, nullptr);
-
-            jclass cls = env->GetObjectClass(javaCanvasObj);
-            jmethodID repaintMid = env->GetMethodID(cls, "repaintCallback", "()V");
-
-            AVFrame *frame = av_frame_alloc();
-            AVFrame *rgbFrame = av_frame_alloc();
-
-            rgbFrame->format = AV_PIX_FMT_RGB24;
-            rgbFrame->width  = frameWidth;
-            rgbFrame->height = frameHeight;
-            av_frame_get_buffer(rgbFrame, 32);
-
-            while (running) {
-                if (!playing) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                    continue;
-                }
-
-                AVPacket *pkt = nullptr;
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    if (!videoQueue.empty()) {
-                        pkt = videoQueue.front();
-                        videoQueue.pop();
-                    }
-                }
-
-                if (!pkt) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                    continue;
-                }
-
-                avcodec_send_packet(decCtx, pkt);
-
-                while (avcodec_receive_frame(decCtx, frame) == 0) {
-
-                    double pts_ms = 0.0;
-                    if (frame->pts != AV_NOPTS_VALUE)
-                        pts_ms = frame->pts * av_q2d(videoStream->time_base) * 1000.0;
-
-                    double audioClockMs =
-                        (double)totalSamplesPlayed.load() / 48000.0 * 1000.0;
-
-                    double diff = pts_ms - audioClockMs;
-
-                    if (diff > 5 && diff < 50) {
-                        std::this_thread::sleep_for(
-                            std::chrono::milliseconds((long)diff));
-                    }
-                    else if (diff < -100) {
-                        continue;
-                    }
-
-                    jclass clsLocal = env->GetObjectClass(javaCanvasObj);
-                    jmethodID setPointMid = env->GetMethodID(clsLocal, "setCurrentPoint", "(I)V");
-                    env->CallVoidMethod(javaCanvasObj, setPointMid, (jint)pts_ms);
-
-                    sws_scale(
-                        swsCtx,
-                        frame->data, frame->linesize,
-                        0, frameHeight,
-                        rgbFrame->data, rgbFrame->linesize
-                    );
-
-                    {
-                        std::lock_guard<std::mutex> lock(frameMutex);
-                        std::memcpy(frameBuffer.data(), rgbFrame->data[0],
-                                    frameWidth * frameHeight * 3);
-                    }
-
-                    env->CallVoidMethod(javaCanvasObj, repaintMid);
-
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                }
-
-                av_packet_free(&pkt);
-            }
-
-            av_frame_free(&rgbFrame);
-            av_frame_free(&frame);
-
-            jvm->DetachCurrentThread(); });
-    }
-
-    void audioThreadRun()
-    {
-        audioThread = std::thread([this]()
-                                  {
-            if (!audioCtx || !swrCtx || !paStream) return;
-
-            AVFrame *frame = av_frame_alloc();
-
-            const int maxSamples = 4096;
-            std::vector<int16_t> pcmBuf(maxSamples * 2);
-
-            while (running) {
-                if (!playing) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                    continue;
-                }
-
-                AVPacket *pkt = nullptr;
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    if (!audioQueue.empty()) {
-                        pkt = audioQueue.front();
-                        audioQueue.pop();
-                    }
-                }
-
-                if (!pkt) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                    continue;
-                }
-
-                avcodec_send_packet(audioCtx, pkt);
-
-                while (avcodec_receive_frame(audioCtx, frame) == 0) {
-                    uint8_t *outData[] = {
-                        reinterpret_cast<uint8_t *>(pcmBuf.data())
-                    };
-
-                    int outSamples = swr_convert(
-                        swrCtx,
-                        outData,
-                        maxSamples,
-                        (const uint8_t **)frame->data,
-                        frame->nb_samples
-                    );
-
-                    if (outSamples > 0) {
-                        Pa_WriteStream(paStream, pcmBuf.data(), outSamples);
-                        totalSamplesPlayed += outSamples;
-                    }
-                }
-                av_packet_free(&pkt);
-            }
-            av_frame_free(&frame); });
     }
 
     void start()
     {
-        if (running)
-        {
-            playing = true;
-            if (paStream)
-                Pa_StartStream(paStream);
+        if (!mp)
             return;
-        }
 
-        if (paStream)
-            Pa_StartStream(paStream);
-
-        running = true;
+        libvlc_media_player_play(mp);
         playing = true;
-        mediaThreadsRun();
-    }
-
-    void pause()
-    {
-        playing = false;
-    }
-
-    void stop()
-    {
-        playing = false;
-        running = false;
-
-        threadWait();
-        clearQueues();
-
-        if (paStream)
-            Pa_StopStream(paStream);
-
-        totalSamplesPlayed = 0;
-    }
-
-    void readThreadRun()
-    {
-        readThread = std::thread([this]()
-                                 {
-        if (isDvd && nav)
-        {
-            uint8_t buf[DVD_VIDEO_LB_LEN]; // 2048 bytes
-            int32_t event = 0;
-            int32_t len = 0;
-
-            while (running)
-            {
-                dvdnav_status_t st = dvdnav_get_next_block(nav, buf, &event, &len);
-
-                if (st == DVDNAV_STATUS_ERR)
-                {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                    continue;
-                }
-
-                if (event == DVDNAV_BLOCK_OK)
-                {
-                    // MPEG2 PS block (2048 bytes)
-                    AVPacket *pkt = av_packet_alloc();
-                    av_new_packet(pkt, len);
-                    memcpy(pkt->data, buf, len);
-
-                    {
-                        std::lock_guard<std::mutex> lock(queueMutex);
-                        videoQueue.push(pkt);
-                    }
-                }
-                else
-                {
-                    // メニューイベントなど
-                    handleDvdEvent(event, buf, len);
-                }
-            }
-            return;
-        }
-
-        // 通常動画（FFmpeg）
-        AVPacket *pkt = av_packet_alloc();
-        while (running)
-        {
-            int ret = av_read_frame(fmtCtx, pkt);
-            if (ret == AVERROR(EAGAIN))
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                continue;
-            }
-            if (ret < 0)
-                break;
-
-            {
-                std::lock_guard<std::mutex> queueLock(queueMutex);
-                if (pkt->stream_index == videoStreamIndex)
-                    videoQueue.push(av_packet_clone(pkt));
-                else if (pkt->stream_index == audioStreamIndex)
-                    audioQueue.push(av_packet_clone(pkt));
-            }
-
-            av_packet_unref(pkt);
-        }
-        av_packet_free(&pkt); });
-    }
-
-    void handleDvdEvent(int32_t event, uint8_t *buf, int32_t len)
-    {
-        switch (event)
-        {
-        case DVDNAV_NAV_PACKET:
-            // メニューのハイライト情報（PCI/DSI）
-            // 必要なら解析する
-            break;
-
-        case DVDNAV_STILL_FRAME:
-            // 静止画メニュー（時間指定 or 無限）
-            // buf に still フレーム情報が入っている
-            // とりあえず無視して OK
-            break;
-
-        case DVDNAV_WAIT:
-            // DVDNAV が内部処理中
-            break;
-
-        case DVDNAV_STOP:
-            // 再生終了
-            playing = false;
-            running = false;
-            break;
-
-        case DVDNAV_SPU_STREAM_CHANGE:
-        case DVDNAV_AUDIO_STREAM_CHANGE:
-        case DVDNAV_VTS_CHANGE:
-        case DVDNAV_CELL_CHANGE:
-            // チャプター移動・セル移動など
-            // FFmpeg のデコード状態をリセット
-            clearQueues();
-            avcodec_flush_buffers(decCtx);
-            if (audioCtx)
-                avcodec_flush_buffers(audioCtx);
-            break;
-
-        default:
-            // その他のイベントは無視
-            break;
-        }
     }
 
     void movePoint(int ms)
     {
-        if (!fmtCtx || !videoStream)
+        if (!mp)
             return;
 
-        std::cout << "[native] seek requested" << std::endl;
-
-        playing = false;
-
-        int64_t ts = (int64_t)((double)ms / 1000.0 *
-                               videoStream->time_base.den /
-                               videoStream->time_base.num);
-
-        int64_t oneSec =
-            videoStream->time_base.den / videoStream->time_base.num;
-        int64_t min_ts = ts - oneSec;
-        int64_t max_ts = ts + oneSec;
-
-        {
-            std::lock_guard<std::mutex> fmtLock(fmtMutex);
-
-            if (avformat_seek_file(fmtCtx, videoStreamIndex,
-                                   min_ts, ts, max_ts,
-                                   AVSEEK_FLAG_BACKWARD) < 0)
-            {
-                std::cout << "[native] seek error" << std::endl;
-            }
-            else
-            {
-                avcodec_flush_buffers(decCtx);
-                if (audioCtx)
-                    avcodec_flush_buffers(audioCtx);
-
-                clearQueues();
-
-                long samplesAtSeek =
-                    (long)((double)ms / 1000.0 * 48000.0);
-                totalSamplesPlayed = samplesAtSeek;
-            }
-        }
-
-        playing = true;
+        libvlc_media_player_set_time(mp, ms);
     }
 
     void skip(bool forward)
     {
-        if (isDvd && nav)
-        {
-            int offset = forward ? 1 : -1;
-
-            dvdnav_sector_search(nav, offset, SEEK_CUR);
-
-            clearQueues();
-            avcodec_flush_buffers(decCtx);
-            if (audioCtx)
-                avcodec_flush_buffers(audioCtx);
-
-            totalSamplesPlayed = 0;
+        if (!mp)
             return;
-        }
 
-        // 通常動画は従来の 10 秒スキップ
-        int currentMs = (int)((double)totalSamplesPlayed.load() / 48000.0 * 1000.0);
-        int target = currentMs + (forward ? 10000 : -10000);
-        movePoint(target);
+        int cur = libvlc_media_player_get_time(mp);
+        int target = cur + (forward ? 10000 : -10000);
+        libvlc_media_player_set_time(mp, target);
     }
 
-    void sendKey(int keyCode)
+    void sendKey(int key)
     {
-        if (!nav)
+        if (!mp)
             return;
 
-        pci_t *pci = dvdnav_get_current_nav_pci(nav);
-
-        switch (keyCode)
+        switch (key)
         {
         case 37:
-            dvdnav_button_select(nav, pci, 1);
-            break; // LEFT
+            libvlc_media_player_navigate(mp, libvlc_navigate_left);
+            break;
         case 39:
-            dvdnav_button_select(nav, pci, 2);
-            break; // RIGHT
+            libvlc_media_player_navigate(mp, libvlc_navigate_right);
+            break;
         case 38:
-            dvdnav_button_select(nav, pci, 3);
-            break; // UP
+            libvlc_media_player_navigate(mp, libvlc_navigate_up);
+            break;
         case 40:
-            dvdnav_button_select(nav, pci, 4);
-            break; // DOWN
+            libvlc_media_player_navigate(mp, libvlc_navigate_down);
+            break;
         case 10:
-            dvdnav_button_activate(nav, pci);
-            break; // ENTER
+            libvlc_media_player_navigate(mp, libvlc_navigate_activate);
+            break;
         }
     }
 
-    bool isDecodeReady() const
-    {
-        return decodeReady;
-    }
-
-    bool isStarted() const
-    {
-        return playing;
-    }
+    bool isDecodeReady() const { return decodeReady; }
+    bool isStarted() const { return playing; }
 
     int getFrame(unsigned char *out)
     {
         std::lock_guard<std::mutex> lock(frameMutex);
         if (frameBuffer.empty())
             return 0;
-        std::memcpy(out, frameBuffer.data(), frameBuffer.size());
-        return (int)frameBuffer.size();
-    }
 
-    DVDPlayerStruct(const DVDPlayerStruct &) = delete;
-    DVDPlayerStruct &operator=(const DVDPlayerStruct &) = delete;
-    DVDPlayerStruct(DVDPlayerStruct &&) = delete;
-    DVDPlayerStruct &operator=(DVDPlayerStruct &&) = delete;
+        std::memcpy(out, frameBuffer.data(), frameBuffer.size());
+        return frameBuffer.size();
+    }
 };
