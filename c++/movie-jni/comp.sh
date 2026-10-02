@@ -9,13 +9,13 @@ FFMPEG_INC="/usr/include/ffmpeg"
 PORTAUDIO_INC="/usr/include"
 DVDNAV_INC="/usr/include"
 DVDREAD_INC="/usr/include"
-LIBVLC_INC="/usr/include/vlc"
+MPV_INC="/usr/include/mpv"        # ★ libmpv に変更
 
 FFMPEG_LIBS="-lavcodec -lavformat -lavutil -lswscale -lswresample"
 PORTAUDIO_LIBS="-lportaudio"
 DVDNAV_LIBS="-ldvdnav"
 DVDREAD_LIBS="-ldvdread"
-LIBVLC_LIBS="-lvlc"
+MPV_LIBS="-lmpv"                  # ★ libvlc → libmpv に変更
 
 clang++ -std=c++17 \
     -I"$JAVA_HOME/include" \
@@ -24,7 +24,7 @@ clang++ -std=c++17 \
     -I"$PORTAUDIO_INC" \
     -I"$DVDNAV_INC" \
     -I"$DVDREAD_INC" \
-    -I"$LIBVLC_INC" \
+    -I"$MPV_INC" \
     -shared -fPIC \
     jni_onload.cpp \
     player_native.cpp \
@@ -33,7 +33,7 @@ clang++ -std=c++17 \
     $PORTAUDIO_LIBS \
     $DVDNAV_LIBS \
     $DVDREAD_LIBS \
-    $LIBVLC_LIBS \
+    $MPV_LIBS \
     -o movie_native.so
 
 echo "[BUILD] movie_native.so generated successfully."

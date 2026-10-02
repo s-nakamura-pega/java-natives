@@ -41,27 +41,16 @@ pkg_check_modules(DVDNAV REQUIRED dvdnav)
 pkg_check_modules(DVDREAD REQUIRED dvdread)
 
 # ----------------------------------------
-# libVLC（Rocky Linux は pkg-config が無いので手動検索）
+# mpv（libmpv）
 # ----------------------------------------
-find_path(LIBVLC_INCLUDE_DIR vlc/vlc.h
-    PATHS /usr/include /usr/local/include
-)
-
-find_library(LIBVLC_LIBRARY
-    NAMES vlc
-    PATHS /usr/lib /usr/lib64 /usr/local/lib
-)
-
-if(NOT LIBVLC_INCLUDE_DIR OR NOT LIBVLC_LIBRARY)
-    message(FATAL_ERROR "libVLC not found. Install VLC first.")
-endif()
+pkg_check_modules(MPV REQUIRED mpv)
 
 include_directories(
     ${FFMPEG_INCLUDE_DIRS}
     ${PORTAUDIO_INCLUDE_DIRS}
     ${DVDNAV_INCLUDE_DIRS}
     ${DVDREAD_INCLUDE_DIRS}
-    ${LIBVLC_INCLUDE_DIR}     # ★ libVLC include
+    ${MPV_INCLUDE_DIRS}       # ★ libmpv include
 )
 
 link_directories(
@@ -69,6 +58,7 @@ link_directories(
     ${PORTAUDIO_LIBRARY_DIRS}
     ${DVDNAV_LIBRARY_DIRS}
     ${DVDREAD_LIBRARY_DIRS}
+    ${MPV_LIBRARY_DIRS}       # ★ libmpv library
 )
 
 # ----------------------------------------
@@ -77,7 +67,7 @@ link_directories(
 add_library(movie_native SHARED
     jni_onload.cpp
     player_native.cpp        # FFmpegベースの通常動画プレイヤー
-    dvd_player_native.cpp    # libVLCベースのDVD専用プレイヤー
+    dvd_player_native.cpp    # ★ mpvベースのDVD専用プレイヤーに書き換え済み
 )
 
 # ----------------------------------------
@@ -100,6 +90,6 @@ target_link_libraries(movie_native
     ${DVDNAV_LIBRARIES}
     ${DVDREAD_LIBRARIES}
 
-    # libVLC（DVD専用プレイヤー）
-    ${LIBVLC_LIBRARY}
+    # mpv（DVD専用プレイヤー）
+    ${MPV_LIBRARIES}
 )
