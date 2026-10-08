@@ -1,9 +1,11 @@
 package sn.tools.natives.swing.canvas;
 
+import java.awt.Canvas;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
+import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -12,13 +14,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.Consumer;
 
-import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 
 import sn.tools.natives.object.NativeObject;
 import sn.tools.natives.util.NativeLoader;
 
-public class MovieCanvas extends JComponent implements NativeMovieCanvas {
+public class MovieCanvas extends Canvas implements NativeComponent, Movie {
 
 	private static final long serialVersionUID = 1L;
 
@@ -28,6 +29,8 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 	private byte[] frameBuffer;
 	private BufferedImage img;
 	private int currentPoint;
+
+	private BufferStrategy bufferStrategy;
 
 	private Consumer<Integer> pointRenderer = _ -> {
 	};
@@ -54,10 +57,7 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 			return;
 		int size = getFrame(frameBuffer);
 		if (size > 0) {
-			SwingUtilities.invokeLater(() -> {
-				img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
-				repaint();
-			});
+			paintComponent();
 		}
 	}
 
@@ -117,42 +117,46 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 	@Override
 	public native boolean isDecodeReady();
 
-	@Override
-	protected void paintComponent(Graphics g) {
-		super.paintComponent(g);
+	public void paintComponent() {
+		img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
 		if (img != null) {
-			Graphics2D g2 = (Graphics2D) g;
-	        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-	                            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-			int cw = getWidth();
-			int ch = getHeight();
+			Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
+			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+					RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			try {
+				int cw = getWidth();
+				int ch = getHeight();
 
-			// 元の動画サイズ
-			double iw = w;
-			double ih = h;
+				// 元の動画サイズ
+				double iw = w;
+				double ih = h;
 
-			// コンポーネントのアスペクト比
-			double aspectCanvas = (double) cw / ch;
-			// 画像のアスペクト比
-			double aspectImage = iw / ih;
+				// コンポーネントのアスペクト比
+				double aspectCanvas = (double) cw / ch;
+				// 画像のアスペクト比
+				double aspectImage = iw / ih;
 
-			int drawW, drawH;
+				int drawW, drawH;
 
-			if (aspectCanvas > aspectImage) {
-				// コンポーネントの方が横に広い → 高さに合わせる
-				drawH = ch;
-				drawW = (int) (ch * aspectImage);
-			} else {
-				// コンポーネントの方が縦に広い → 幅に合わせる
-				drawW = cw;
-				drawH = (int) (cw / aspectImage);
+				if (aspectCanvas > aspectImage) {
+					// コンポーネントの方が横に広い → 高さに合わせる
+					drawH = ch;
+					drawW = (int) (ch * aspectImage);
+				} else {
+					// コンポーネントの方が縦に広い → 幅に合わせる
+					drawW = cw;
+					drawH = (int) (cw / aspectImage);
+				}
+
+				// 中央に配置
+				int x = (cw - drawW) / 2;
+				int y = (ch - drawH) / 2;
+
+				g.drawImage(img, x, y, drawW, drawH, null);
+			} finally {
+				g.dispose();
 			}
-
-			// 中央に配置
-			int x = (cw - drawW) / 2;
-			int y = (ch - drawH) / 2;
-			
-			g2.drawImage(img, x, y, drawW, drawH, null);
+			bufferStrategy.show();
 			Toolkit.getDefaultToolkit().sync();
 		}
 	}
@@ -160,6 +164,8 @@ public class MovieCanvas extends JComponent implements NativeMovieCanvas {
 	@Override
 	public void addNotify() {
 		super.addNotify();
+		createBufferStrategy(2);
+		bufferStrategy = getBufferStrategy();
 		handleId = create();
 	}
 

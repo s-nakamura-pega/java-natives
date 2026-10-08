@@ -1,6 +1,6 @@
 package sn.tools.natives.swing.canvas;
 
-public interface NativeDVDCanvas extends NativeMovieCanvas {
+public interface DiscPlayer extends Movie {
 
 	void skip(boolean isForward);
 

@@ -20,7 +20,7 @@ import javax.swing.SwingUtilities;
 import sn.tools.natives.object.NativeObject;
 import sn.tools.natives.util.NativeLoader;
 
-public class DVDCanvas extends JComponent implements NativeDVDCanvas {
+public class DVDCanvas extends JComponent implements NativeComponent, DiscPlayer {
 
 	private static final long serialVersionUID = 1L;
 
