@@ -1,4 +1,4 @@
-package sn.tools.natives.swing.canvas;
+package sn.tools.natives.swing.api.component;
 
 import sn.tools.natives.object.NativeObject;
 

@@ -1,4 +1,4 @@
-package sn.tools.natives.swing.canvas;
+package sn.tools.natives.swing.api.movie;
 
 public interface DiscPlayer extends Movie {
 

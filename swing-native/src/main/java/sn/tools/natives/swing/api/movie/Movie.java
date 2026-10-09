@@ -1,4 +1,6 @@
-package sn.tools.natives.swing.canvas;
+package sn.tools.natives.swing.api.movie;
+
+import java.util.function.Consumer;
 
 public interface Movie {
 
@@ -19,5 +21,7 @@ public interface Movie {
     public int getCurrentPoint();
 
     public void setCurrentPoint(int currentPoint);
+
+    public void setPointRenderer(Consumer<Integer> pointRenderer);
 
 }

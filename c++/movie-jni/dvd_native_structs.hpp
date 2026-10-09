@@ -1,605 +1,248 @@
 #pragma once
 
-#include <mpv/client.h>
-#include <mpv/render.h>
-
+#include <vlc/vlc.h>
 #include <jni.h>
-
-#include <atomic>
-#include <cstdint>
-#include <cstring>
 #include <mutex>
-#include <string>
-#include <thread>
 #include <vector>
+#include <string>
+#include <atomic>
+#include <cstring>
 
 struct DVDPlayerStruct
 {
-    mpv_handle *mpv = nullptr;
-    mpv_render_context *renderCtx = nullptr;
+    libvlc_instance_t *vlc = nullptr;
+    libvlc_media_player_t *mp = nullptr;
+    libvlc_media_t *media = nullptr;
 
     JavaVM *jvm = nullptr;
     jobject javaCanvasObj = nullptr;
 
-    // mpv software renderer 用
-    // BGR0: 4 bytes / pixel
-    std::vector<uint8_t> renderBuffer;
-
-    // Java TYPE_3BYTE_BGR 用
-    // BGR: 3 bytes / pixel
-    std::vector<uint8_t> frameBuffer;
-
     std::mutex frameMutex;
+    std::vector<uint8_t> frameBuffer;
 
     int frameWidth = 720;
     int frameHeight = 480;
 
-    std::atomic<bool> running{false};
-    std::atomic<bool> redrawRequested{false};
     std::atomic<bool> decodeReady{false};
     std::atomic<bool> playing{false};
-
-    std::thread eventThread;
 
     DVDPlayerStruct(JavaVM *vm, jobject canvasObj)
         : jvm(vm)
     {
         JNIEnv *env = nullptr;
-
-        if (jvm->AttachCurrentThread(
-                reinterpret_cast<void **>(&env),
-                nullptr) != JNI_OK)
-        {
-            return;
-        }
-
+        jvm->AttachCurrentThread((void **)&env, nullptr);
         javaCanvasObj = env->NewGlobalRef(canvasObj);
-
         jvm->DetachCurrentThread();
 
-        mpv = mpv_create();
-        if (!mpv)
-            return;
-
-        /*
-         * mpv自身にはウィンドウを作らせない。
-         * 描画結果はlibmpv render APIから取得する。
-         */
-        mpv_set_option_string(mpv, "vo", "libmpv");
-
-        if (mpv_initialize(mpv) < 0)
-        {
-            mpv_destroy(mpv);
-            mpv = nullptr;
-            return;
-        }
-
-        /*
-         * OpenGLではなくsoftware rendererを使用。
-         * Swingへ渡すためのCPUメモリへ直接描画する。
-         */
-        mpv_render_param params[] = {
-            {MPV_RENDER_PARAM_API_TYPE,
-             const_cast<char *>(MPV_RENDER_API_TYPE_SW)},
-            {MPV_RENDER_PARAM_INVALID,
-             nullptr}};
-
-        if (mpv_render_context_create(
-                &renderCtx,
-                mpv,
-                params) < 0)
-        {
-
-            mpv_terminate_destroy(mpv);
-            mpv = nullptr;
-            return;
-        }
-
-        mpv_render_context_set_update_callback(
-            renderCtx,
-            onRenderUpdate,
-            this);
-
-        running = true;
-
-        eventThread = std::thread([this]()
-                                  { eventLoop(); });
+        const char *args[] = {
+            "--no-video-title-show",
+            "--quiet",
+            "--no-sub-autodetect-file"};
+        vlc = libvlc_new(3, args);
     }
 
     ~DVDPlayerStruct()
     {
-        running = false;
+        stop();
 
-        if (mpv)
-            mpv_wakeup(mpv);
-
-        if (eventThread.joinable())
-            eventThread.join();
-
-        if (renderCtx)
+        if (mp)
         {
-            mpv_render_context_set_update_callback(
-                renderCtx,
-                nullptr,
-                nullptr);
-
-            mpv_render_context_free(renderCtx);
-            renderCtx = nullptr;
+            libvlc_media_player_release(mp);
+            mp = nullptr;
         }
-
-        if (mpv)
+        if (media)
         {
-            mpv_terminate_destroy(mpv);
-            mpv = nullptr;
+            libvlc_media_release(media);
+            media = nullptr;
+        }
+        if (vlc)
+        {
+            libvlc_release(vlc);
+            vlc = nullptr;
         }
 
         if (javaCanvasObj)
         {
             JNIEnv *env = nullptr;
-
-            if (jvm->AttachCurrentThread(
-                    reinterpret_cast<void **>(&env),
-                    nullptr) == JNI_OK)
-            {
-
-                env->DeleteGlobalRef(javaCanvasObj);
-                javaCanvasObj = nullptr;
-
-                jvm->DetachCurrentThread();
-            }
+            jvm->AttachCurrentThread((void **)&env, nullptr);
+            env->DeleteGlobalRef(javaCanvasObj);
+            jvm->DetachCurrentThread();
+            javaCanvasObj = nullptr;
         }
     }
 
-    // --------------------------------------------------
-    // libmpv -> redraw notification
-    // --------------------------------------------------
-
-    static void onRenderUpdate(void *opaque)
+    // ==========================
+    // libVLC callbacks
+    // ==========================
+    static void *lock(void *opaque, void **planes)
     {
-        auto *self =
-            static_cast<DVDPlayerStruct *>(opaque);
-
-        self->redrawRequested = true;
-
-        if (self->mpv)
-            mpv_wakeup(self->mpv);
+        auto *self = static_cast<DVDPlayerStruct *>(opaque);
+        std::lock_guard<std::mutex> lock(self->frameMutex);
+        *planes = self->frameBuffer.data();
+        return nullptr;
     }
 
-    // --------------------------------------------------
-    // mpv event thread
-    // --------------------------------------------------
-
-    void eventLoop()
+    static void unlock(void *opaque, void *picture, void *const *planes)
     {
-        while (running)
-        {
-
-            if (redrawRequested.exchange(false))
-                renderFrame();
-
-            mpv_event *event =
-                mpv_wait_event(mpv, 0.05);
-
-            if (!event)
-                continue;
-
-            switch (event->event_id)
-            {
-
-            case MPV_EVENT_FILE_LOADED:
-                initializeFrame();
-                decodeReady = true;
-                break;
-
-            case MPV_EVENT_END_FILE:
-                playing = false;
-                break;
-
-            case MPV_EVENT_SHUTDOWN:
-                running = false;
-                break;
-
-            default:
-                break;
-            }
-        }
     }
 
-    // --------------------------------------------------
-    // Frame initialization
-    // --------------------------------------------------
-
-    void initializeFrame()
+    static void display(void *opaque, void *picture)
     {
-        {
-            std::lock_guard<std::mutex> lock(frameMutex);
+        auto *self = static_cast<DVDPlayerStruct *>(opaque);
 
-            renderBuffer.resize(
-                static_cast<size_t>(frameWidth) *
-                frameHeight * 4);
-
-            frameBuffer.resize(
-                static_cast<size_t>(frameWidth) *
-                frameHeight * 3);
-        }
-
-        callInitCanvas();
-    }
-
-    // --------------------------------------------------
-    // Render mpv -> BGR0 -> TYPE_3BYTE_BGR
-    // --------------------------------------------------
-
-    void renderFrame()
-    {
-        if (!renderCtx)
-            return;
-
-        int size[2] = {
-            frameWidth,
-            frameHeight};
-
-        int stride =
-            frameWidth * 4;
-
-        std::lock_guard<std::mutex> lock(frameMutex);
-
-        if (renderBuffer.empty() ||
-            frameBuffer.empty())
-        {
-            return;
-        }
-
-        /*
-         * mpvへは4byte/pixelのBGR0を要求。
-         *
-         * Javaへ直接渡さず、下でBGR24へ変換する。
-         */
-        mpv_render_param params[] = {
-            {MPV_RENDER_PARAM_SW_SIZE,
-             size},
-            {MPV_RENDER_PARAM_SW_FORMAT,
-             const_cast<char *>("bgr0")},
-            {MPV_RENDER_PARAM_SW_STRIDE,
-             &stride},
-            {MPV_RENDER_PARAM_SW_POINTER,
-             renderBuffer.data()},
-            {MPV_RENDER_PARAM_INVALID,
-             nullptr}};
-
-        if (mpv_render_context_render(
-                renderCtx,
-                params) < 0)
-        {
-            return;
-        }
-
-        /*
-         * BGR0
-         *
-         * B G R 0 | B G R 0 | ...
-         *
-         * ↓
-         *
-         * Java BufferedImage.TYPE_3BYTE_BGR
-         *
-         * B G R | B G R | ...
-         */
-
-        const size_t pixelCount =
-            static_cast<size_t>(frameWidth) *
-            frameHeight;
-
-        for (size_t i = 0; i < pixelCount; ++i)
-        {
-
-            const size_t src = i * 4;
-            const size_t dst = i * 3;
-
-            frameBuffer[dst] = renderBuffer[src];
-            frameBuffer[dst + 1] = renderBuffer[src + 1];
-            frameBuffer[dst + 2] = renderBuffer[src + 2];
-        }
-
-        /*
-         * frameBuffer完成後にJavaへ通知。
-         *
-         * Java:
-         * repaintCallback()
-         *   -> getFrame()
-         *   -> BufferedImage
-         */
-        callRepaint();
-    }
-
-    // --------------------------------------------------
-    // Java callbacks
-    // --------------------------------------------------
-
-    void callInitCanvas()
-    {
         JNIEnv *env = nullptr;
+        self->jvm->AttachCurrentThread((void **)&env, nullptr);
 
-        if (jvm->AttachCurrentThread(
-                reinterpret_cast<void **>(&env),
-                nullptr) != JNI_OK)
-        {
-            return;
-        }
+        jclass cls = env->GetObjectClass(self->javaCanvasObj);
+        jmethodID mid = env->GetMethodID(cls, "repaintCallback", "()V");
+        env->CallVoidMethod(self->javaCanvasObj, mid);
 
-        jclass cls =
-            env->GetObjectClass(javaCanvasObj);
-
-        if (cls)
-        {
-            jmethodID mid =
-                env->GetMethodID(
-                    cls,
-                    "initCanvas",
-                    "(II)V");
-
-            if (mid)
-            {
-                env->CallVoidMethod(
-                    javaCanvasObj,
-                    mid,
-                    frameWidth,
-                    frameHeight);
-            }
-
-            env->DeleteLocalRef(cls);
-        }
-
-        jvm->DetachCurrentThread();
+        self->jvm->DetachCurrentThread();
     }
 
-    void callRepaint()
-    {
-        JNIEnv *env = nullptr;
-
-        if (jvm->AttachCurrentThread(
-                reinterpret_cast<void **>(&env),
-                nullptr) != JNI_OK)
-        {
-            return;
-        }
-
-        jclass cls =
-            env->GetObjectClass(javaCanvasObj);
-
-        if (cls)
-        {
-            jmethodID mid =
-                env->GetMethodID(
-                    cls,
-                    "repaintCallback",
-                    "()V");
-
-            if (mid)
-                env->CallVoidMethod(
-                    javaCanvasObj,
-                    mid);
-
-            env->DeleteLocalRef(cls);
-        }
-
-        jvm->DetachCurrentThread();
-    }
-
-    // --------------------------------------------------
-    // DVD load
-    // --------------------------------------------------
-
+    // ==========================
+    // setFile（完全修正版）
+    // ==========================
     long setFile(const char *path)
     {
-        if (!mpv)
-            return -1;
-
         decodeReady = false;
-        playing = false;
+        stop();
 
+        // 古い mp/media を完全破棄
+        if (mp)
         {
-            std::lock_guard<std::mutex> lock(frameMutex);
-
-            renderBuffer.clear();
-            frameBuffer.clear();
+            libvlc_media_player_release(mp);
+            mp = nullptr;
+        }
+        if (media)
+        {
+            libvlc_media_release(media);
+            media = nullptr;
         }
 
-        /*
-         * dvd-device はloadfileより先に設定する。
-         */
-        if (mpv_set_property_string(
-                mpv,
-                "dvd-device",
-                path) < 0)
-        {
+        // 新しい mp
+        mp = libvlc_media_player_new(vlc);
+
+        // callbacks 先に設定
+        frameBuffer.resize(frameWidth * frameHeight * 3);
+        libvlc_video_set_callbacks(mp, lock, unlock, display, this);
+        libvlc_video_set_format(mp, "RV24", frameWidth, frameHeight, frameWidth * 3);
+
+        // DVD メディア作成（場所は常に "dvd://"）
+        media = libvlc_media_new_location(vlc, "dvd://");
+        if (!media)
             return -1;
-        }
 
-        const char *cmd[] = {
-            "loadfile",
-            "dvd://",
-            "replace",
-            nullptr};
+        // 実際のデバイス/ディレクトリをオプションで渡す
+        // path は "/run/media/.../SONIC_THE_HEDGEHOG" か "…/VIDEO_TS" を想定
+        std::string opt = std::string(":dvd-device=") + path;
+        libvlc_media_add_option(media, opt.c_str());
 
-        if (mpv_command(
-                mpv,
-                cmd) < 0)
+        // 必要ならメニューから開始したい場合
+        // libvlc_media_add_option(media, "dvdnav-menu=1");
+
+        // mp に media をセット
+        libvlc_media_player_set_media(mp, media);
+
+        // Java に canvas サイズ通知
         {
-            return -1;
+            JNIEnv *env = nullptr;
+            jvm->AttachCurrentThread((void **)&env, nullptr);
+            jclass cls = env->GetObjectClass(javaCanvasObj);
+            jmethodID mid = env->GetMethodID(cls, "initCanvas", "(II)V");
+            env->CallVoidMethod(javaCanvasObj, mid, frameWidth, frameHeight);
+            jvm->DetachCurrentThread();
         }
 
-        /*
-         * Javaデモ側では
-         *
-         * length > 0
-         *
-         * を成功判定にしているため、
-         * DVDでは未知のdurationを仮に1として返す。
-         *
-         * 実際のduration取得を実装する場合は
-         * durationプロパティからmsを返せばよい。
-         */
-        return 1;
+        decodeReady = true;
+        return 0;
     }
 
-    // --------------------------------------------------
-    // Playback
-    // --------------------------------------------------
+    // ==========================
+    // stop（完全修正版）
+    // ==========================
+    void stop()
+    {
+        playing = false;
+
+        if (mp)
+        {
+            // 再生停止
+            libvlc_media_player_stop(mp);
+
+            // コールバック無効化
+            libvlc_video_set_callbacks(mp, nullptr, nullptr, nullptr, nullptr);
+            libvlc_video_set_format(mp, nullptr, 0, 0, 0);
+
+            decodeReady = false;
+
+            std::lock_guard<std::mutex> lock(frameMutex);
+            frameBuffer.clear();
+        }
+    }
 
     void start()
     {
-        if (!mpv || !decodeReady)
+        if (!mp)
             return;
 
-        mpv_set_property_string(
-            mpv,
-            "pause",
-            "no");
-
+        libvlc_media_player_play(mp);
         playing = true;
     }
 
-    void stop()
-    {
-        if (!mpv)
-            return;
-
-        /*
-         * Java API上の stop は
-         * 再開可能な停止として扱う。
-         */
-        mpv_set_property_string(
-            mpv,
-            "pause",
-            "yes");
-
-        playing = false;
-    }
-
-    // --------------------------------------------------
-    // Seek
-    // --------------------------------------------------
-
     void movePoint(int ms)
     {
-        if (!mpv)
+        if (!mp)
             return;
 
-        std::string seconds =
-            std::to_string(
-                static_cast<double>(ms) /
-                1000.0);
-
-        const char *cmd[] = {
-            "seek",
-            seconds.c_str(),
-            "absolute",
-            nullptr};
-
-        mpv_command(mpv, cmd);
+        libvlc_media_player_set_time(mp, ms);
     }
 
     void skip(bool forward)
     {
-        if (!mpv)
+        if (!mp)
             return;
 
-        const char *cmd[] = {
-            "seek",
-            forward ? "10" : "-10",
-            "relative",
-            nullptr};
-
-        mpv_command(mpv, cmd);
+        int cur = libvlc_media_player_get_time(mp);
+        int target = cur + (forward ? 10000 : -10000);
+        libvlc_media_player_set_time(mp, target);
     }
-
-    // --------------------------------------------------
-    // DVD navigation
-    // --------------------------------------------------
 
     void sendKey(int key)
     {
-        if (!mpv)
+        if (!mp)
             return;
-
-        const char *name = nullptr;
 
         switch (key)
         {
         case 37:
-            name = "LEFT";
+            libvlc_media_player_navigate(mp, libvlc_navigate_left);
             break;
-
         case 39:
-            name = "RIGHT";
+            libvlc_media_player_navigate(mp, libvlc_navigate_right);
             break;
-
         case 38:
-            name = "UP";
+            libvlc_media_player_navigate(mp, libvlc_navigate_up);
             break;
-
         case 40:
-            name = "DOWN";
+            libvlc_media_player_navigate(mp, libvlc_navigate_down);
             break;
-
         case 10:
-            name = "ENTER";
+            libvlc_media_player_navigate(mp, libvlc_navigate_activate);
             break;
-
-        default:
-            return;
         }
-
-        const char *cmd[] = {
-            "keypress",
-            name,
-            nullptr};
-
-        mpv_command(mpv, cmd);
     }
 
-    // --------------------------------------------------
-    // State
-    // --------------------------------------------------
-
-    bool isDecodeReady() const
-    {
-        return decodeReady;
-    }
-
-    bool isStarted() const
-    {
-        return playing;
-    }
-
-    // --------------------------------------------------
-    // Swing frame transfer
-    // --------------------------------------------------
+    bool isDecodeReady() const { return decodeReady; }
+    bool isStarted() const { return playing; }
 
     int getFrame(unsigned char *out)
     {
         std::lock_guard<std::mutex> lock(frameMutex);
-
         if (frameBuffer.empty())
             return 0;
 
-        const size_t size =
-            static_cast<size_t>(frameWidth) *
-            frameHeight * 3;
-
-        std::memcpy(
-            out,
-            frameBuffer.data(),
-            size);
-
-        return static_cast<int>(size);
+        std::memcpy(out, frameBuffer.data(), frameBuffer.size());
+        return frameBuffer.size();
     }
-
-    DVDPlayerStruct(
-        const DVDPlayerStruct &) = delete;
-
-    DVDPlayerStruct &
-    operator=(
-        const DVDPlayerStruct &) = delete;
 };

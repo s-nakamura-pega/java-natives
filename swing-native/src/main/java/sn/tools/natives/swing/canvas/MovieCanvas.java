@@ -1,7 +1,6 @@
 package sn.tools.natives.swing.canvas;
 
 import java.awt.Canvas;
-import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
@@ -17,9 +16,11 @@ import java.util.function.Consumer;
 import javax.swing.SwingUtilities;
 
 import sn.tools.natives.object.NativeObject;
+import sn.tools.natives.swing.api.component.NativeComponent;
+import sn.tools.natives.swing.api.movie.Movie;
 import sn.tools.natives.util.NativeLoader;
 
-public class MovieCanvas extends Canvas implements NativeComponent, Movie {
+class MovieCanvas extends Canvas implements NativeComponent, Movie {
 
 	private static final long serialVersionUID = 1L;
 
@@ -53,10 +54,12 @@ public class MovieCanvas extends Canvas implements NativeComponent, Movie {
 
 	@Override
 	public void repaintCallback() {
-		if (handleId == 0)
+		if (handleId == 0) {
 			return;
+		}
 		int size = getFrame(frameBuffer);
 		if (size > 0) {
+			img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
 			paintComponent();
 		}
 	}
@@ -118,7 +121,9 @@ public class MovieCanvas extends Canvas implements NativeComponent, Movie {
 	public native boolean isDecodeReady();
 
 	public void paintComponent() {
-		img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
+		if (bufferStrategy == null) {
+			return;
+		}
 		if (img != null) {
 			Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
 			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
@@ -164,14 +169,20 @@ public class MovieCanvas extends Canvas implements NativeComponent, Movie {
 	@Override
 	public void addNotify() {
 		super.addNotify();
-		createBufferStrategy(2);
-		bufferStrategy = getBufferStrategy();
+		SwingUtilities.invokeLater(() -> {
+			createBufferStrategy(2);
+			bufferStrategy = getBufferStrategy();
+		});
 		handleId = create();
 	}
 
 	@Override
 	public void removeNotify() {
 		super.removeNotify();
+		if (bufferStrategy != null) {
+			bufferStrategy.dispose();
+			bufferStrategy = null;
+		}
 		NativeObject.close(this);
 	}
 

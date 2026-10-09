@@ -96,6 +96,8 @@ struct PlayerStruct
     // duration
     long durationMs = -1;
 
+    double lastPtsMs = 0.0;
+
     // audio clock（音声の再生位置）
     std::atomic<long> totalSamplesPlayed{0};
 
@@ -388,20 +390,22 @@ struct PlayerStruct
                     double diff = pts_ms - audioClockMs;
 
                     // 映像が遅れている → 先送り（デコードを進める）
-                    if (diff < -1)
+                    if (lastPtsMs > 0 && diff < -(pts_ms - lastPtsMs))
                     {
                         // ★ 描画せず、次のフレームを取りに行く
                         break;
                     }
 
                     // 映像が先行 → 最大50ms待つ
-                    if (diff > 1)
+                    if (diff > 0)
                     {
                         long waitMs = (long)diff;
                         if (waitMs > 50)
                             waitMs = 50;
                         std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
                     }
+
+                    lastPtsMs = pts_ms;
 
                     jclass clsLocal = env->GetObjectClass(javaCanvasObj);
                     jmethodID setPointMid = env->GetMethodID(clsLocal, "setCurrentPoint", "(I)V");
@@ -599,6 +603,7 @@ struct PlayerStruct
         clearQueues();
 
         totalSamplesPlayed = 0;
+        lastPtsMs = 0.0;
         start();
     }
 

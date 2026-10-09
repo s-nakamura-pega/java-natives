@@ -9,13 +9,13 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.Timer;
-import sn.tools.natives.swing.canvas.MovieCanvas;
+import sn.tools.natives.swing.canvas.MovieCanvasComponent;
 
 public class MovieFrame extends JFrame {
 
 	private static final long serialVersionUID = 1L;
 
-	private final MovieCanvas canvas;
+	private final MovieCanvasComponent canvas;
 	private final JButton playButton;
 	private final JButton stopButton;
 	private final JButton loadButton;
@@ -29,7 +29,7 @@ public class MovieFrame extends JFrame {
 		setLayout(new BorderLayout());
 
 		// --- center: MovieCanvas ---
-		canvas = new MovieCanvas();
+		canvas = new MovieCanvasComponent();
 		add(canvas, BorderLayout.CENTER);
 
 		// --- north: ファイル読み込み ---

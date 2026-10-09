@@ -10,13 +10,13 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.Timer;
 
-import sn.tools.natives.swing.canvas.DVDCanvas;
+import sn.tools.natives.swing.canvas.DVDCanvasComponent;
 
 public class DVDMovieFrame extends JFrame {
 
 	private static final long serialVersionUID = 1L;
 
-	private final DVDCanvas canvas;
+	private final DVDCanvasComponent canvas;
 	private final JButton playButton;
 	private final JButton stopButton;
 	private final JButton forwardButton;
@@ -32,7 +32,7 @@ public class DVDMovieFrame extends JFrame {
 		setLayout(new BorderLayout());
 
 		// --- center: MovieCanvas ---
-		canvas = new DVDCanvas();
+		canvas = new DVDCanvasComponent();
 		add(canvas, BorderLayout.CENTER);
 
 		// --- north: ファイル読み込み ---
