@@ -96,10 +96,8 @@ struct PlayerStruct
     // duration
     long durationMs = -1;
 
-    double lastPtsMs = 0.0;
-
-    // audio clock（音声の再生位置）
-    std::atomic<long> totalSamplesPlayed{0};
+    double videoPtsMs = 0.0;
+    double audioPtsMs = 0.0;
 
     int sampleRate = 48000;
 
@@ -385,27 +383,30 @@ struct PlayerStruct
                 {
 
                     double pts_ms = frame->pts * av_q2d(videoStream->time_base) * 1000.0;
-                    double audioClockMs = (double)totalSamplesPlayed / (double)sampleRate * 1000.0;
 
-                    double diff = pts_ms - audioClockMs;
-
-                    // 映像が遅れている → 先送り（デコードを進める）
-                    if (lastPtsMs > 0 && diff < -(pts_ms - lastPtsMs))
+                    double diff = pts_ms - audioPtsMs;
+                    double videoPtsDiff = pts_ms - videoPtsMs;
+                    if (videoPtsMs > 0)
                     {
-                        // ★ 描画せず、次のフレームを取りに行く
-                        break;
-                    }
+                        // 映像が遅れている → 先送り（デコードを進める）
+                        if (diff < -videoPtsDiff)
+                        {
+                            // ★ 描画せず、次のフレームを取りに行く
+                            break;
+                        }
 
-                    // 映像が先行 → 最大50ms待つ
-                    if (diff > 0)
-                    {
-                        long waitMs = (long)diff;
-                        if (waitMs > 50)
-                            waitMs = 50;
-                        std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
-                    }
+                        // 映像が先行 → 最大50ms待つ
+                        if (diff > -1.0)
+                        {
+                            if (diff > 50.0)
+                            {
+                                diff = 50.0;
+                            }
 
-                    lastPtsMs = pts_ms;
+                            std::this_thread::sleep_for(std::chrono::milliseconds((long)diff));
+                        }
+                    }
+                    videoPtsMs = pts_ms;
 
                     jclass clsLocal = env->GetObjectClass(javaCanvasObj);
                     jmethodID setPointMid = env->GetMethodID(clsLocal, "setCurrentPoint", "(I)V");
@@ -424,8 +425,6 @@ struct PlayerStruct
                     }
 
                     env->CallVoidMethod(javaCanvasObj, repaintMid);
-
-                    // std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }
 
             av_packet_free(&pkt);
@@ -475,9 +474,8 @@ struct PlayerStruct
                     // ★ audio frame の PTS を ms に変換
                     double pts_ms = frame->pts * av_q2d(audioStream->time_base) * 1000.0;
 
-                    // ★ PTS をサンプル数に変換して totalSamplesPlayed を上書き
-                    long samplesByPTS = (long)(pts_ms / 1000.0 * sampleRate);
-                    totalSamplesPlayed = samplesByPTS;
+                    audioPtsMs = pts_ms;
+                    
                     uint8_t *outData[] = {
                         reinterpret_cast<uint8_t *>(pcmBuf.data())};
 
@@ -530,7 +528,8 @@ struct PlayerStruct
         if (paStream)
             Pa_StopStream(paStream);
 
-        totalSamplesPlayed = 0;
+        videoPtsMs = 0.0;
+        audioPtsMs = 0.0;
     }
 
     void readThreadRun()
@@ -602,8 +601,9 @@ struct PlayerStruct
 
         clearQueues();
 
-        totalSamplesPlayed = 0;
-        lastPtsMs = 0.0;
+        videoPtsMs = 0.0;
+        audioPtsMs = 0.0;
+
         start();
     }
 

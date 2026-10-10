@@ -25,6 +25,22 @@ import sn.tools.natives.util.NativeLoader;
 class DVDCanvas extends Canvas implements NativeComponent, DiscPlayer {
 
 	private static final long serialVersionUID = 1L;
+	private KeyListener keyListener = new KeyListener() {
+
+		@Override
+		public void keyTyped(KeyEvent e) {
+		}
+
+		@Override
+		public void keyReleased(KeyEvent e) {
+		}
+
+		@Override
+		public void keyPressed(KeyEvent e) {
+			sendKey(e.getKeyCode());
+		}
+
+	};
 
 	private long handleId = 0;
 
@@ -42,7 +58,9 @@ class DVDCanvas extends Canvas implements NativeComponent, DiscPlayer {
 		super();
 		NativeLoader.load("swing.component.movie");
 		setFocusable(true);
-		requestFocusInWindow();
+		SwingUtilities.invokeLater(() -> {
+			requestFocusInWindow();
+		});
 	}
 
 	@Override
@@ -178,32 +196,18 @@ class DVDCanvas extends Canvas implements NativeComponent, DiscPlayer {
 			bufferStrategy = getBufferStrategy();
 		});
 		handleId = create();
-		addKeyListener(new KeyListener() {
-
-			@Override
-			public void keyTyped(KeyEvent e) {
-			}
-
-			@Override
-			public void keyReleased(KeyEvent e) {
-			}
-
-			@Override
-			public void keyPressed(KeyEvent e) {
-				sendKey(e.getKeyCode());
-			}
-
-		});
+		addKeyListener(keyListener);
 	}
 
 	@Override
 	public void removeNotify() {
 		super.removeNotify();
+		NativeObject.close(this);
+		removeKeyListener(keyListener);
 		if (bufferStrategy != null) {
 			bufferStrategy.dispose();
 			bufferStrategy = null;
 		}
-		NativeObject.close(this);
 	}
 
 	@Override

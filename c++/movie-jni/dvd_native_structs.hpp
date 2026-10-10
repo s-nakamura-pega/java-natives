@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <vlc/vlc.h>
 #include <jni.h>
 #include <mutex>
@@ -108,54 +109,89 @@ struct DVDPlayerStruct
         decodeReady = false;
         stop();
 
-        // 古い mp/media を完全破棄
         if (mp)
         {
             libvlc_media_player_release(mp);
             mp = nullptr;
         }
+
         if (media)
         {
             libvlc_media_release(media);
             media = nullptr;
         }
 
-        // 新しい mp
         mp = libvlc_media_player_new(vlc);
 
-        // callbacks 先に設定
         frameBuffer.resize(frameWidth * frameHeight * 3);
-        libvlc_video_set_callbacks(mp, lock, unlock, display, this);
-        libvlc_video_set_format(mp, "RV24", frameWidth, frameHeight, frameWidth * 3);
 
-        // DVD メディア作成（場所は常に "dvd://"）
-        media = libvlc_media_new_location(vlc, "dvd://");
+        libvlc_video_set_callbacks(
+            mp,
+            lock,
+            unlock,
+            display,
+            this);
+
+        libvlc_video_set_format(
+            mp,
+            "RV24",
+            frameWidth,
+            frameHeight,
+            frameWidth * 3);
+
+        media = libvlc_media_new_location(
+            vlc,
+            "dvd://");
+
         if (!media)
+        {
+            std::cerr
+                << "Failed to create media for DVD."
+                << std::endl;
             return -1;
+        }
 
-        // 実際のデバイス/ディレクトリをオプションで渡す
-        // path は "/run/media/.../SONIC_THE_HEDGEHOG" か "…/VIDEO_TS" を想定
-        std::string opt = std::string(":dvd-device=") + path;
-        libvlc_media_add_option(media, opt.c_str());
+        std::string opt =
+            std::string(":dvd-device=") + path;
 
-        // 必要ならメニューから開始したい場合
-        // libvlc_media_add_option(media, "dvdnav-menu=1");
+        libvlc_media_add_option(
+            media,
+            opt.c_str());
 
-        // mp に media をセット
-        libvlc_media_player_set_media(mp, media);
+        libvlc_media_player_set_media(
+            mp,
+            media);
 
-        // Java に canvas サイズ通知
+        //
+        // Javaへサイズ通知
+        //
         {
             JNIEnv *env = nullptr;
-            jvm->AttachCurrentThread((void **)&env, nullptr);
-            jclass cls = env->GetObjectClass(javaCanvasObj);
-            jmethodID mid = env->GetMethodID(cls, "initCanvas", "(II)V");
-            env->CallVoidMethod(javaCanvasObj, mid, frameWidth, frameHeight);
-            jvm->DetachCurrentThread();
+
+            jvm->AttachCurrentThread(
+                (void **)&env,
+                nullptr);
+
+            jclass cls =
+                env->GetObjectClass(
+                    javaCanvasObj);
+
+            jmethodID mid =
+                env->GetMethodID(
+                    cls,
+                    "initCanvas",
+                    "(II)V");
+
+            env->CallVoidMethod(
+                javaCanvasObj,
+                mid,
+                frameWidth,
+                frameHeight);
         }
 
         decodeReady = true;
-        return 0;
+
+        return 1;
     }
 
     // ==========================

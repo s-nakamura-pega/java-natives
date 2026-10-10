@@ -6,6 +6,7 @@ import java.io.File;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.Timer;
@@ -46,16 +47,16 @@ public class DVDMovieFrame extends JFrame {
 
 		playButton = new JButton("▶ 再生");
 		stopButton = new JButton("■ 停止");
-		forwardButton = new JButton("|◀◀");
-		backButton = new JButton("▶▶|");
+		backButton = new JButton("|◀◀");
+		forwardButton = new JButton("▶▶|");
 
 		seekBar = new JSlider(0, 1000, 0);
 		seekBar.setPreferredSize(new java.awt.Dimension(300, 30));
 
 		controlPanel.add(playButton);
 		controlPanel.add(stopButton);
-		controlPanel.add(forwardButton);
 		controlPanel.add(backButton);
+		controlPanel.add(forwardButton);
 		controlPanel.add(seekBar);
 
 		add(controlPanel, BorderLayout.SOUTH);
@@ -130,6 +131,7 @@ public class DVDMovieFrame extends JFrame {
 			System.out.println("動画読み込み成功: " + file.getName());
 		} else {
 			System.err.println("動画読み込み失敗");
+			JOptionPane.showMessageDialog(this, "動画の読み込みに失敗しました。", "エラー", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 

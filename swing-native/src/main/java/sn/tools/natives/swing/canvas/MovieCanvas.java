@@ -179,11 +179,11 @@ class MovieCanvas extends Canvas implements NativeComponent, Movie {
 	@Override
 	public void removeNotify() {
 		super.removeNotify();
+		NativeObject.close(this);
 		if (bufferStrategy != null) {
 			bufferStrategy.dispose();
 			bufferStrategy = null;
 		}
-		NativeObject.close(this);
 	}
 
 	@Override

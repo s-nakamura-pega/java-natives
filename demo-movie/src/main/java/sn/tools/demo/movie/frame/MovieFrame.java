@@ -6,6 +6,7 @@ import java.io.File;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.Timer;
@@ -118,6 +119,7 @@ public class MovieFrame extends JFrame {
 			System.out.println("動画読み込み成功: " + file.getName());
 		} else {
 			System.err.println("動画読み込み失敗");
+			JOptionPane.showMessageDialog(this, "動画の読み込みに失敗しました。", "エラー", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 
