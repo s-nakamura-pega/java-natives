@@ -16,12 +16,12 @@ public interface Movie {
 
     boolean isDecodeReady();
 
-    public boolean isStarted();
+    boolean isStarted();
 
-    public int getCurrentPoint();
+    int getCurrentPoint();
 
-    public void setCurrentPoint(int currentPoint);
+    void setCurrentPoint(int currentPoint);
 
-    public void setPointRenderer(Consumer<Integer> pointRenderer);
+    void setPointRenderer(Consumer<Integer> pointRenderer);
 
 }

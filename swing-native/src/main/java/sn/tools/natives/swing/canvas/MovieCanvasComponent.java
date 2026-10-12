@@ -5,6 +5,7 @@ import javax.swing.JComponent;
 import sn.tools.natives.swing.api.movie.Movie;
 
 import java.awt.BorderLayout;
+import java.awt.Graphics;
 import java.util.function.Consumer;
 
 public class MovieCanvasComponent extends JComponent implements Movie {
@@ -68,6 +69,12 @@ public class MovieCanvasComponent extends JComponent implements Movie {
     @Override
     public void setPointRenderer(Consumer<Integer> pointRenderer) {
         movieCanvas.setPointRenderer(pointRenderer);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        movieCanvas.paintComponent();
     }
 
 }

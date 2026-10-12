@@ -18,11 +18,10 @@ import java.util.function.Consumer;
 import javax.swing.SwingUtilities;
 
 import sn.tools.natives.object.NativeObject;
-import sn.tools.natives.swing.api.component.NativeComponent;
 import sn.tools.natives.swing.api.movie.DiscPlayer;
 import sn.tools.natives.util.NativeLoader;
 
-class DVDCanvas extends Canvas implements NativeComponent, DiscPlayer {
+class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 
 	private static final long serialVersionUID = 1L;
 	private KeyListener keyListener = new KeyListener() {
@@ -48,8 +47,12 @@ class DVDCanvas extends Canvas implements NativeComponent, DiscPlayer {
 	private byte[] frameBuffer;
 	private BufferedImage img;
 	private int currentPoint;
+	private long duration;
 
 	private Consumer<Integer> pointRenderer = _ -> {
+	};
+
+	private Consumer<Long> durationRenderer = _ -> {
 	};
 
 	private BufferStrategy bufferStrategy;
@@ -142,7 +145,8 @@ class DVDCanvas extends Canvas implements NativeComponent, DiscPlayer {
 	@Override
 	public native boolean isDecodeReady();
 
-	public void paintComponent() {
+	@Override
+	public synchronized void paintComponent() {
 		if (bufferStrategy == null) {
 			return;
 		}
@@ -250,5 +254,16 @@ class DVDCanvas extends Canvas implements NativeComponent, DiscPlayer {
 
 	@Override
 	public native void sendKey(int key);
+
+	@Override
+	public void changeDuration(long duration) {
+		this.duration = duration;
+		SwingUtilities.invokeLater(() -> durationRenderer.accept(duration));
+	}
+
+	@Override
+	public void setChangeDurationRenderer(Consumer<Long> durationRenderer) {
+		this.durationRenderer = durationRenderer;
+	}
 
 }

@@ -1,6 +1,7 @@
 package sn.tools.demo.dvd.frame;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.File;
 import javax.swing.JButton;
@@ -51,7 +52,7 @@ public class DVDMovieFrame extends JFrame {
 		forwardButton = new JButton("▶▶|");
 
 		seekBar = new JSlider(0, 1000, 0);
-		seekBar.setPreferredSize(new java.awt.Dimension(300, 30));
+		seekBar.setPreferredSize(new Dimension(300, 30));
 
 		controlPanel.add(playButton);
 		controlPanel.add(stopButton);
@@ -112,6 +113,10 @@ public class DVDMovieFrame extends JFrame {
 			isSeekInnerUpdate = true;
 			seekBar.setValue(point);
 			isSeekInnerUpdate = false;
+		});
+
+		canvas.setChangeDurationRenderer(duration -> {
+			seekBar.setMaximum(duration.intValue());
 		});
 
 		// --- 状態監視タイマー（200msごとにボタン状態を更新） ---

@@ -1,6 +1,7 @@
 package sn.tools.natives.swing.canvas;
 
 import java.awt.BorderLayout;
+import java.awt.Graphics;
 import java.util.function.Consumer;
 
 import javax.swing.JComponent;
@@ -82,6 +83,22 @@ public class DVDCanvasComponent extends JComponent implements DiscPlayer {
     @Override
     public void sendKey(int key) {
         canvas.sendKey(key);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        canvas.paintComponent();
+    }
+
+    @Override
+    public void changeDuration(long duration) {
+        canvas.changeDuration(duration);
+    }
+
+    @Override
+    public void setChangeDurationRenderer(Consumer<Long> durationRenderer) {
+        canvas.setChangeDurationRenderer(durationRenderer);
     }
 
 }

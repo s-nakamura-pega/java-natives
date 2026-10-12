@@ -16,11 +16,10 @@ import java.util.function.Consumer;
 import javax.swing.SwingUtilities;
 
 import sn.tools.natives.object.NativeObject;
-import sn.tools.natives.swing.api.component.NativeComponent;
 import sn.tools.natives.swing.api.movie.Movie;
 import sn.tools.natives.util.NativeLoader;
 
-class MovieCanvas extends Canvas implements NativeComponent, Movie {
+class MovieCanvas extends Canvas implements NativeCanvas, Movie {
 
 	private static final long serialVersionUID = 1L;
 
@@ -120,7 +119,8 @@ class MovieCanvas extends Canvas implements NativeComponent, Movie {
 	@Override
 	public native boolean isDecodeReady();
 
-	public void paintComponent() {
+	@Override
+	public synchronized void paintComponent() {
 		if (bufferStrategy == null) {
 			return;
 		}
