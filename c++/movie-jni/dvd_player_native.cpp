@@ -124,9 +124,9 @@ extern "C"
   }
 
   // ===============================
-  // DVDCanvas.movePoint(int)
+  // DVDCanvas.movePoint(long)
   // ===============================
-  JNIEXPORT void JNICALL Java_sn_tools_natives_swing_canvas_DVDCanvas_movePoint(JNIEnv *env, jobject obj, jint ms)
+  JNIEXPORT void JNICALL Java_sn_tools_natives_swing_canvas_DVDCanvas_movePoint(JNIEnv *env, jobject obj, jlong ms)
   {
     jclass cls = env->GetObjectClass(obj);
     jmethodID mid = env->GetMethodID(cls, "getHandleId", "()J");

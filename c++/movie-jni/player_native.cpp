@@ -114,8 +114,8 @@ extern "C"
     player->pause();
   }
 
-  // MovieCanvas.movePoint(int)
-  JNIEXPORT void JNICALL Java_sn_tools_natives_swing_canvas_MovieCanvas_movePoint(JNIEnv *env, jobject obj, jint ms)
+  // MovieCanvas.movePoint(long)
+  JNIEXPORT void JNICALL Java_sn_tools_natives_swing_canvas_MovieCanvas_movePoint(JNIEnv *env, jobject obj, jlong ms)
   {
 
     jclass cls = env->GetObjectClass(obj);

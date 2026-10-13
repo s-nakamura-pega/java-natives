@@ -28,11 +28,11 @@ class MovieCanvas extends Canvas implements NativeCanvas, Movie {
 	private int w, h;
 	private byte[] frameBuffer;
 	private BufferedImage img;
-	private int currentPoint;
+	private long currentPoint;
 
 	private BufferStrategy bufferStrategy;
 
-	private Consumer<Integer> pointRenderer = _ -> {
+	private Consumer<Long> pointRenderer = _ -> {
 	};
 
 	public MovieCanvas() {
@@ -114,14 +114,14 @@ class MovieCanvas extends Canvas implements NativeCanvas, Movie {
 	public native void stop();
 
 	@Override
-	public native void movePoint(int ms);
+	public native void movePoint(long ms);
 
 	@Override
 	public native boolean isDecodeReady();
 
 	@Override
 	public synchronized void paintComponent() {
-		if (bufferStrategy == null) {
+		if (bufferStrategy == null || !isDisplayable() || getParent() == null) {
 			return;
 		}
 		if (img != null) {
@@ -199,17 +199,17 @@ class MovieCanvas extends Canvas implements NativeCanvas, Movie {
 	public native boolean isStarted();
 
 	@Override
-	public int getCurrentPoint() {
+	public long getCurrentPoint() {
 		return currentPoint;
 	}
 
 	@Override
-	public void setCurrentPoint(int currentPoint) {
+	public void setCurrentPoint(long currentPoint) {
 		this.currentPoint = currentPoint;
 		SwingUtilities.invokeLater(() -> pointRenderer.accept(currentPoint));
 	}
 
-	public void setPointRenderer(Consumer<Integer> pointRenderer) {
+	public void setPointRenderer(Consumer<Long> pointRenderer) {
 		this.pointRenderer = pointRenderer;
 	}
 

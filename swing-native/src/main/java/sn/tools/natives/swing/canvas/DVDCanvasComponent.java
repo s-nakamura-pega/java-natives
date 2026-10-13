@@ -46,7 +46,7 @@ public class DVDCanvasComponent extends JComponent implements DiscPlayer {
     }
 
     @Override
-    public void movePoint(int ms) {
+    public void movePoint(long ms) {
         canvas.movePoint(ms);
     }
 
@@ -61,17 +61,17 @@ public class DVDCanvasComponent extends JComponent implements DiscPlayer {
     }
 
     @Override
-    public int getCurrentPoint() {
+    public long getCurrentPoint() {
         return canvas.getCurrentPoint();
     }
 
     @Override
-    public void setCurrentPoint(int currentPoint) {
+    public void setCurrentPoint(long currentPoint) {
         canvas.setCurrentPoint(currentPoint);
     }
 
     @Override
-    public void setPointRenderer(Consumer<Integer> pointRenderer) {
+    public void setPointRenderer(Consumer<Long> pointRenderer) {
         canvas.setPointRenderer(pointRenderer);
     }
 

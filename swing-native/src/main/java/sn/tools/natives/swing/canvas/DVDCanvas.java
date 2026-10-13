@@ -46,10 +46,10 @@ class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 	private int w, h;
 	private byte[] frameBuffer;
 	private BufferedImage img;
-	private int currentPoint;
+	private long currentPoint;
 	private long duration;
 
-	private Consumer<Integer> pointRenderer = _ -> {
+	private Consumer<Long> pointRenderer = _ -> {
 	};
 
 	private Consumer<Long> durationRenderer = _ -> {
@@ -140,20 +140,29 @@ class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 	public native void stop();
 
 	@Override
-	public native void movePoint(int ms);
+	public native void movePoint(long ms);
 
 	@Override
 	public native boolean isDecodeReady();
 
 	@Override
 	public synchronized void paintComponent() {
-		if (bufferStrategy == null) {
+		if (bufferStrategy == null || !isDisplayable() || getParent() == null) {
 			return;
 		}
 		if (img != null) {
 			Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
-			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-					RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			g.setRenderingHint(
+					RenderingHints.KEY_INTERPOLATION,
+					RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+
+			g.setRenderingHint(
+					RenderingHints.KEY_RENDERING,
+					RenderingHints.VALUE_RENDER_QUALITY);
+
+			g.setRenderingHint(
+					RenderingHints.KEY_ALPHA_INTERPOLATION,
+					RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
 			try {
 				int cw = getWidth();
 				int ch = getHeight();
@@ -227,17 +236,17 @@ class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 	public native boolean isStarted();
 
 	@Override
-	public int getCurrentPoint() {
+	public long getCurrentPoint() {
 		return currentPoint;
 	}
 
 	@Override
-	public void setCurrentPoint(int currentPoint) {
+	public void setCurrentPoint(long currentPoint) {
 		this.currentPoint = currentPoint;
 		SwingUtilities.invokeLater(() -> pointRenderer.accept(currentPoint));
 	}
 
-	public void setPointRenderer(Consumer<Integer> pointRenderer) {
+	public void setPointRenderer(Consumer<Long> pointRenderer) {
 		this.pointRenderer = pointRenderer;
 	}
 

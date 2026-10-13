@@ -18,6 +18,8 @@ public class DVDMovieFrame extends JFrame {
 
 	private static final long serialVersionUID = 1L;
 
+	private static final int SEEK_BAR_MAX = 1000;
+
 	private final DVDCanvasComponent canvas;
 	private final JButton playButton;
 	private final JButton stopButton;
@@ -27,6 +29,8 @@ public class DVDMovieFrame extends JFrame {
 	private final JSlider seekBar;
 	private boolean isSeekInnerUpdate = false;
 	private boolean isMovingPoint = false;
+
+	private double seekValueScale = 0.0;
 
 	public DVDMovieFrame() {
 		super("Movie Player");
@@ -51,7 +55,7 @@ public class DVDMovieFrame extends JFrame {
 		backButton = new JButton("|◀◀");
 		forwardButton = new JButton("▶▶|");
 
-		seekBar = new JSlider(0, 1000, 0);
+		seekBar = new JSlider(0, SEEK_BAR_MAX, 0);
 		seekBar.setPreferredSize(new Dimension(300, 30));
 
 		controlPanel.add(playButton);
@@ -100,7 +104,7 @@ public class DVDMovieFrame extends JFrame {
 			if (!seekBar.getValueIsAdjusting()) {
 				isMovingPoint = true;
 				int ms = seekBar.getValue();
-				canvas.movePoint(ms);
+				canvas.movePoint((long) (ms * seekValueScale));
 				isMovingPoint = false;
 			}
 		});
@@ -111,7 +115,7 @@ public class DVDMovieFrame extends JFrame {
 				return;
 			}
 			isSeekInnerUpdate = true;
-			seekBar.setValue(point);
+			seekBar.setValue((int) (point / seekValueScale));
 			isSeekInnerUpdate = false;
 		});
 
@@ -130,7 +134,7 @@ public class DVDMovieFrame extends JFrame {
 	private void loadMovieFile(File file) {
 		long length = canvas.setFile(file.getAbsolutePath());
 		if (length > 0) {
-			seekBar.setMaximum((int) length);
+			seekValueScale = (double) length / SEEK_BAR_MAX;
 			seekBar.setValue(0);
 			updatePlayButtonState();
 			System.out.println("動画読み込み成功: " + file.getName());

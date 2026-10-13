@@ -409,8 +409,8 @@ struct PlayerStruct
                     videoPtsMs = pts_ms;
 
                     jclass clsLocal = env->GetObjectClass(javaCanvasObj);
-                    jmethodID setPointMid = env->GetMethodID(clsLocal, "setCurrentPoint", "(I)V");
-                    env->CallVoidMethod(javaCanvasObj, setPointMid, (jint)pts_ms);
+                    jmethodID setPointMid = env->GetMethodID(clsLocal, "setCurrentPoint", "(J)V");
+                    env->CallVoidMethod(javaCanvasObj, setPointMid, (jlong)pts_ms);
 
                     sws_scale(
                         swsCtx,
@@ -565,7 +565,7 @@ struct PlayerStruct
             av_packet_free(&pkt); });
     }
 
-    void movePoint(int ms)
+    void movePoint(int64_t ms)
     {
         pause();
         if (!fmtCtx || !videoStream)

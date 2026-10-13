@@ -12,16 +12,16 @@ public interface Movie {
 
     void stop();
 
-    void movePoint(int ms);
+    void movePoint(long ms);
 
     boolean isDecodeReady();
 
     boolean isStarted();
 
-    int getCurrentPoint();
+    long getCurrentPoint();
 
-    void setCurrentPoint(int currentPoint);
+    void setCurrentPoint(long currentPoint);
 
-    void setPointRenderer(Consumer<Integer> pointRenderer);
+    void setPointRenderer(Consumer<Long> pointRenderer);
 
 }

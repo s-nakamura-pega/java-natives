@@ -226,7 +226,7 @@ struct DVDPlayerStruct
         playing = true;
     }
 
-    void movePoint(int ms)
+    void movePoint(int64_t ms)
     {
         if (!mp)
             return;

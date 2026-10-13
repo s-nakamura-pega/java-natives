@@ -42,7 +42,7 @@ public class MovieCanvasComponent extends JComponent implements Movie {
     }
 
     @Override
-    public void movePoint(int ms) {
+    public void movePoint(long ms) {
         movieCanvas.movePoint(ms);
     }
 
@@ -57,17 +57,17 @@ public class MovieCanvasComponent extends JComponent implements Movie {
     }
 
     @Override
-    public int getCurrentPoint() {
+    public long getCurrentPoint() {
         return movieCanvas.getCurrentPoint();
     }
 
     @Override
-    public void setCurrentPoint(int currentPoint) {
+    public void setCurrentPoint(long currentPoint) {
         movieCanvas.setCurrentPoint(currentPoint);
     }
 
     @Override
-    public void setPointRenderer(Consumer<Integer> pointRenderer) {
+    public void setPointRenderer(Consumer<Long> pointRenderer) {
         movieCanvas.setPointRenderer(pointRenderer);
     }
 
