@@ -1,13 +1,7 @@
 package sn.tools.natives.swing.canvas;
 
-import java.awt.Canvas;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
-import java.awt.image.BufferStrategy;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -17,13 +11,11 @@ import java.util.function.Consumer;
 
 import javax.swing.SwingUtilities;
 
-import sn.tools.natives.object.NativeObject;
 import sn.tools.natives.swing.api.movie.DiscPlayer;
 import sn.tools.natives.util.NativeLoader;
 
-class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
+class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
 
-	private static final long serialVersionUID = 1L;
 	private KeyListener keyListener = new KeyListener() {
 
 		@Override
@@ -41,21 +33,10 @@ class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 
 	};
 
-	private long handleId = 0;
-
-	private int w, h;
-	private byte[] frameBuffer;
-	private BufferedImage img;
-	private long currentPoint;
 	private long duration;
-
-	private Consumer<Long> pointRenderer = _ -> {
-	};
 
 	private Consumer<Long> durationRenderer = _ -> {
 	};
-
-	private BufferStrategy bufferStrategy;
 
 	public DVDCanvas() {
 		super();
@@ -67,27 +48,7 @@ class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 	}
 
 	@Override
-	public void initCanvas(int width, int height) {
-		this.w = width;
-		this.h = height;
-		this.frameBuffer = new byte[w * h * 3];
-		this.img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
-	}
-
-	@Override
 	public native int getFrame(byte[] buffer);
-
-	@Override
-	public void repaintCallback() {
-		if (handleId == 0) {
-			return;
-		}
-		int size = getFrame(frameBuffer);
-		if (size > 0) {
-			img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
-			paintComponent();
-		}
-	}
 
 	@Override
 	public long setData(byte[] data) {
@@ -112,28 +73,6 @@ class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 	}
 
 	@Override
-	public void close() {
-		destroy();
-
-		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
-		try {
-			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(handleId));
-			if (Files.exists(dir)) {
-				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
-						.forEach(p -> {
-							try {
-								Files.deleteIfExists(p);
-							} catch (IOException ignored) {
-							}
-						});
-			}
-		} catch (IOException ignored) {
-		}
-
-		handleId = 0;
-	}
-
-	@Override
 	public native void start();
 
 	@Override
@@ -146,117 +85,26 @@ class DVDCanvas extends Canvas implements NativeCanvas, DiscPlayer {
 	public native boolean isDecodeReady();
 
 	@Override
-	public synchronized void paintComponent() {
-		if (bufferStrategy == null || !isDisplayable() || getParent() == null) {
-			return;
-		}
-		if (img != null) {
-			Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
-			g.setRenderingHint(
-					RenderingHints.KEY_INTERPOLATION,
-					RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-
-			g.setRenderingHint(
-					RenderingHints.KEY_RENDERING,
-					RenderingHints.VALUE_RENDER_QUALITY);
-
-			g.setRenderingHint(
-					RenderingHints.KEY_ALPHA_INTERPOLATION,
-					RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
-			try {
-				int cw = getWidth();
-				int ch = getHeight();
-
-				// 元の動画サイズ
-				double iw = w;
-				double ih = h;
-
-				// コンポーネントのアスペクト比
-				double aspectCanvas = (double) cw / ch;
-				// 画像のアスペクト比
-				double aspectImage = iw / ih;
-
-				int drawW, drawH;
-
-				if (aspectCanvas > aspectImage) {
-					// コンポーネントの方が横に広い → 高さに合わせる
-					drawH = ch;
-					drawW = (int) (ch * aspectImage);
-				} else {
-					// コンポーネントの方が縦に広い → 幅に合わせる
-					drawW = cw;
-					drawH = (int) (cw / aspectImage);
-				}
-
-				// 中央に配置
-				int x = (cw - drawW) / 2;
-				int y = (ch - drawH) / 2;
-
-				g.drawImage(img, x, y, drawW, drawH, null);
-			} finally {
-				g.dispose();
-			}
-			bufferStrategy.show();
-			Toolkit.getDefaultToolkit().sync();
-		}
-	}
-
-	@Override
 	public void addNotify() {
 		super.addNotify();
-		SwingUtilities.invokeLater(() -> {
-			createBufferStrategy(2);
-			bufferStrategy = getBufferStrategy();
-		});
-		handleId = create();
 		addKeyListener(keyListener);
 	}
 
 	@Override
 	public void removeNotify() {
-		super.removeNotify();
-		NativeObject.close(this);
 		removeKeyListener(keyListener);
-		if (bufferStrategy != null) {
-			bufferStrategy.dispose();
-			bufferStrategy = null;
-		}
+		super.removeNotify();
 	}
 
-	@Override
-	public long getHandleId() {
-		return handleId;
-	}
+	protected native long create();
 
-	private native long create();
-
-	private native void destroy();
+	protected native void destroy();
 
 	@Override
 	public native boolean isStarted();
 
 	@Override
-	public long getCurrentPoint() {
-		return currentPoint;
-	}
-
-	@Override
-	public void setCurrentPoint(long currentPoint) {
-		this.currentPoint = currentPoint;
-		SwingUtilities.invokeLater(() -> pointRenderer.accept(currentPoint));
-	}
-
-	public void setPointRenderer(Consumer<Long> pointRenderer) {
-		this.pointRenderer = pointRenderer;
-	}
-
-	@Override
 	public native long setFile(String filePath);
-
-	@Override
-	public void setHandleId(long handleId) {
-		this.handleId = handleId;
-	}
 
 	@Override
 	public native void skip(boolean isForward);

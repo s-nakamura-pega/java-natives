@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <vlc/libvlc.h>
 #include <vlc/vlc.h>
 #include <jni.h>
 #include <mutex>
@@ -78,7 +79,6 @@ struct DVDPlayerStruct
     static void *lock(void *opaque, void **planes)
     {
         auto *self = static_cast<DVDPlayerStruct *>(opaque);
-        std::lock_guard<std::mutex> lock(self->frameMutex);
         *planes = self->frameBuffer.data();
         return nullptr;
     }
@@ -97,6 +97,25 @@ struct DVDPlayerStruct
         jclass cls = env->GetObjectClass(self->javaCanvasObj);
         jmethodID mid = env->GetMethodID(cls, "repaintCallback", "()V");
         env->CallVoidMethod(self->javaCanvasObj, mid);
+
+        long long currentMs = libvlc_media_player_get_time(self->mp);
+        jmethodID setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(J)V");
+        env->CallVoidMethod(self->javaCanvasObj, setPointMid, (jlong)currentMs);
+
+        self->jvm->DetachCurrentThread();
+    }
+
+    static void onChapterChanged(const libvlc_event_t *event, void *userData)
+    {
+        auto *self = static_cast<DVDPlayerStruct *>(userData);
+        JNIEnv *env = nullptr;
+        self->jvm->AttachCurrentThread((void **)&env, nullptr);
+
+        long long durationMs = libvlc_media_player_get_length(self->mp);
+
+        jclass clsLocal = env->GetObjectClass(self->javaCanvasObj);
+        jmethodID setPointMid = env->GetMethodID(clsLocal, "changeDuration", "(J)V");
+        env->CallVoidMethod(self->javaCanvasObj, setPointMid, (jlong)durationMs);
 
         self->jvm->DetachCurrentThread();
     }
@@ -189,6 +208,14 @@ struct DVDPlayerStruct
                 frameHeight);
         }
 
+        libvlc_video_set_aspect_ratio(mp, NULL);
+        libvlc_video_set_scale(mp, 0);
+        libvlc_video_set_spu(mp, -1);
+
+        libvlc_event_manager_t *eventManager = libvlc_media_player_event_manager(mp);
+        libvlc_event_attach(eventManager, libvlc_MediaPlayerTitleChanged, onChapterChanged, this);
+        libvlc_event_attach(eventManager, libvlc_MediaPlayerChapterChanged, onChapterChanged, this);
+
         decodeReady = true;
 
         return 1;
@@ -265,6 +292,9 @@ struct DVDPlayerStruct
             break;
         case 10:
             libvlc_media_player_navigate(mp, libvlc_navigate_activate);
+            break;
+        case 77:
+            libvlc_media_player_set_title(mp, 0);
             break;
         }
     }

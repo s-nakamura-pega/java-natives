@@ -120,7 +120,13 @@ public class DVDMovieFrame extends JFrame {
 		});
 
 		canvas.setChangeDurationRenderer(duration -> {
-			seekBar.setMaximum(duration.intValue());
+			if (isMovingPoint || seekBar.getValueIsAdjusting()) {
+				return;
+			}
+			isSeekInnerUpdate = true;
+			seekValueScale = (double) duration / SEEK_BAR_MAX;
+			seekBar.setValue(0);
+			isSeekInnerUpdate = false;
 		});
 
 		// --- 状態監視タイマー（200msごとにボタン状態を更新） ---

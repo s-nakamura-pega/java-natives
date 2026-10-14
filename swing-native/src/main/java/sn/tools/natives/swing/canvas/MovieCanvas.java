@@ -1,39 +1,14 @@
 package sn.tools.natives.swing.canvas;
 
-import java.awt.Canvas;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.Toolkit;
-import java.awt.image.BufferStrategy;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.function.Consumer;
-
-import javax.swing.SwingUtilities;
-
-import sn.tools.natives.object.NativeObject;
 import sn.tools.natives.swing.api.movie.Movie;
 import sn.tools.natives.util.NativeLoader;
 
-class MovieCanvas extends Canvas implements NativeCanvas, Movie {
-
-	private static final long serialVersionUID = 1L;
-
-	private long handleId = 0;
-
-	private int w, h;
-	private byte[] frameBuffer;
-	private BufferedImage img;
-	private long currentPoint;
-
-	private BufferStrategy bufferStrategy;
-
-	private Consumer<Long> pointRenderer = _ -> {
-	};
+class MovieCanvas extends AbstractMovieCanvas implements Movie {
 
 	public MovieCanvas() {
 		super();
@@ -41,27 +16,7 @@ class MovieCanvas extends Canvas implements NativeCanvas, Movie {
 	}
 
 	@Override
-	public void initCanvas(int width, int height) {
-		this.w = width;
-		this.h = height;
-		this.frameBuffer = new byte[w * h * 3];
-		this.img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
-	}
-
-	@Override
 	public native int getFrame(byte[] buffer);
-
-	@Override
-	public void repaintCallback() {
-		if (handleId == 0) {
-			return;
-		}
-		int size = getFrame(frameBuffer);
-		if (size > 0) {
-			img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
-			paintComponent();
-		}
-	}
 
 	@Override
 	public long setData(byte[] data) {
@@ -86,28 +41,6 @@ class MovieCanvas extends Canvas implements NativeCanvas, Movie {
 	}
 
 	@Override
-	public void close() {
-		destroy();
-
-		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
-		try {
-			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(handleId));
-			if (Files.exists(dir)) {
-				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
-						.forEach(p -> {
-							try {
-								Files.deleteIfExists(p);
-							} catch (IOException ignored) {
-							}
-						});
-			}
-		} catch (IOException ignored) {
-		}
-
-		handleId = 0;
-	}
-
-	@Override
 	public native void start();
 
 	@Override
@@ -120,105 +53,18 @@ class MovieCanvas extends Canvas implements NativeCanvas, Movie {
 	public native boolean isDecodeReady();
 
 	@Override
-	public synchronized void paintComponent() {
-		if (bufferStrategy == null || !isDisplayable() || getParent() == null) {
-			return;
-		}
-		if (img != null) {
-			Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
-			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-					RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-			try {
-				int cw = getWidth();
-				int ch = getHeight();
-
-				// 元の動画サイズ
-				double iw = w;
-				double ih = h;
-
-				// コンポーネントのアスペクト比
-				double aspectCanvas = (double) cw / ch;
-				// 画像のアスペクト比
-				double aspectImage = iw / ih;
-
-				int drawW, drawH;
-
-				if (aspectCanvas > aspectImage) {
-					// コンポーネントの方が横に広い → 高さに合わせる
-					drawH = ch;
-					drawW = (int) (ch * aspectImage);
-				} else {
-					// コンポーネントの方が縦に広い → 幅に合わせる
-					drawW = cw;
-					drawH = (int) (cw / aspectImage);
-				}
-
-				// 中央に配置
-				int x = (cw - drawW) / 2;
-				int y = (ch - drawH) / 2;
-
-				g.drawImage(img, x, y, drawW, drawH, null);
-			} finally {
-				g.dispose();
-			}
-			bufferStrategy.show();
-			Toolkit.getDefaultToolkit().sync();
-		}
-	}
-
-	@Override
-	public void addNotify() {
-		super.addNotify();
-		SwingUtilities.invokeLater(() -> {
-			createBufferStrategy(2);
-			bufferStrategy = getBufferStrategy();
-		});
-		handleId = create();
-	}
-
-	@Override
-	public void removeNotify() {
-		super.removeNotify();
-		NativeObject.close(this);
-		if (bufferStrategy != null) {
-			bufferStrategy.dispose();
-			bufferStrategy = null;
-		}
-	}
-
-	@Override
 	public long getHandleId() {
 		return handleId;
 	}
 
-	private native long create();
+	protected native long create();
 
-	private native void destroy();
+	protected native void destroy();
 
 	@Override
 	public native boolean isStarted();
 
 	@Override
-	public long getCurrentPoint() {
-		return currentPoint;
-	}
-
-	@Override
-	public void setCurrentPoint(long currentPoint) {
-		this.currentPoint = currentPoint;
-		SwingUtilities.invokeLater(() -> pointRenderer.accept(currentPoint));
-	}
-
-	public void setPointRenderer(Consumer<Long> pointRenderer) {
-		this.pointRenderer = pointRenderer;
-	}
-
-	@Override
 	public native long setFile(String filePath);
-
-	@Override
-	public void setHandleId(long handleId) {
-		this.handleId = handleId;
-	}
 
 }
