@@ -111,7 +111,7 @@ struct DVDPlayerStruct
         JNIEnv *env = nullptr;
         self->jvm->AttachCurrentThread((void **)&env, nullptr);
 
-        long long durationMs = libvlc_media_player_get_length(self->mp);
+        long durationMs = libvlc_media_player_get_length(self->mp);
 
         jclass clsLocal = env->GetObjectClass(self->javaCanvasObj);
         jmethodID setPointMid = env->GetMethodID(clsLocal, "changeDuration", "(J)V");
