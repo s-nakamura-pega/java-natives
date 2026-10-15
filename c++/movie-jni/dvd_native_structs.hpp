@@ -151,12 +151,14 @@ struct DVDPlayerStruct
             display,
             this);
 
+        int stride = frameWidth * 3;
+        stride = (stride + 3)& ~3;
         libvlc_video_set_format(
             mp,
             "RV24",
             frameWidth,
             frameHeight,
-            frameWidth * 3);
+            stride);
 
         media = libvlc_media_new_location(
             vlc,
@@ -208,8 +210,8 @@ struct DVDPlayerStruct
                 frameHeight);
         }
 
-        libvlc_video_set_aspect_ratio(mp, NULL);
-        libvlc_video_set_scale(mp, 0);
+        libvlc_video_set_aspect_ratio(mp, "0:0");
+        libvlc_video_set_scale(mp, 1.0f);
         libvlc_video_set_spu(mp, -1);
 
         libvlc_event_manager_t *eventManager = libvlc_media_player_event_manager(mp);
@@ -238,9 +240,6 @@ struct DVDPlayerStruct
             libvlc_video_set_format(mp, nullptr, 0, 0, 0);
 
             decodeReady = false;
-
-            std::lock_guard<std::mutex> lock(frameMutex);
-            frameBuffer.clear();
         }
     }
 
