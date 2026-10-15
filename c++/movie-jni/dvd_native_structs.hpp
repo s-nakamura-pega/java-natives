@@ -98,7 +98,7 @@ struct DVDPlayerStruct
         jmethodID mid = env->GetMethodID(cls, "repaintCallback", "()V");
         env->CallVoidMethod(self->javaCanvasObj, mid);
 
-        long long currentMs = libvlc_media_player_get_time(self->mp);
+        long currentMs = libvlc_media_player_get_time(self->mp);
         jmethodID setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(J)V");
         env->CallVoidMethod(self->javaCanvasObj, setPointMid, (jlong)currentMs);
 
