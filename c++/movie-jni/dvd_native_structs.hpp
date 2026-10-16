@@ -79,6 +79,7 @@ struct DVDPlayerStruct
     static void *lock(void *opaque, void **planes)
     {
         auto *self = static_cast<DVDPlayerStruct *>(opaque);
+        self->frameMutex.lock();
         *planes = self->frameBuffer.data();
         return nullptr;
     }
@@ -208,6 +209,7 @@ struct DVDPlayerStruct
                 mid,
                 frameWidth,
                 frameHeight);
+            jvm->DetachCurrentThread();
         }
 
         libvlc_video_set_aspect_ratio(mp, "0:0");
