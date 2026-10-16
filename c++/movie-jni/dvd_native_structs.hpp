@@ -86,6 +86,8 @@ struct DVDPlayerStruct
 
     static void unlock(void *opaque, void *picture, void *const *planes)
     {
+        auto *self = static_cast<DVDPlayerStruct *>(opaque);
+        self->frameMutex.unlock();
     }
 
     static void display(void *opaque, void *picture)
