@@ -82,15 +82,15 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 			Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
 			g.setRenderingHint(
 					RenderingHints.KEY_INTERPOLATION,
-					RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+					RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 
-			g.setRenderingHint(
-					RenderingHints.KEY_RENDERING,
-					RenderingHints.VALUE_RENDER_QUALITY);
+			// g.setRenderingHint(
+			// RenderingHints.KEY_RENDERING,
+			// RenderingHints.VALUE_RENDER_QUALITY);
 
-			g.setRenderingHint(
-					RenderingHints.KEY_ALPHA_INTERPOLATION,
-					RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+			// g.setRenderingHint(
+			// RenderingHints.KEY_ALPHA_INTERPOLATION,
+			// RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
 			try {
 				int cw = getWidth();
 				int ch = getHeight();

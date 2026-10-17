@@ -121,6 +121,7 @@ public class MovieFrame extends JFrame {
 			seekBar.setValue(0);
 			updatePlayButtonState();
 			System.out.println("動画読み込み成功: " + file.getName());
+			canvas.start();
 		} else {
 			System.err.println("動画読み込み失敗");
 			JOptionPane.showMessageDialog(this, "動画の読み込みに失敗しました。", "エラー", JOptionPane.ERROR_MESSAGE);

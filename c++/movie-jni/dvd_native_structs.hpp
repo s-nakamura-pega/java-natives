@@ -22,8 +22,8 @@ struct DVDPlayerStruct
     std::mutex frameMutex;
     std::vector<uint8_t> frameBuffer;
 
-    int frameWidth = 720;
-    int frameHeight = 480;
+    int frameWidth = 1920;
+    int frameHeight = 1080;
 
     std::atomic<bool> decodeReady{false};
     std::atomic<bool> playing{false};
@@ -155,7 +155,7 @@ struct DVDPlayerStruct
             this);
 
         int stride = frameWidth * 3;
-        stride = (stride + 3)& ~3;
+        // stride = (stride + 3) & ~3;
         libvlc_video_set_format(
             mp,
             "RV24",
@@ -214,13 +214,14 @@ struct DVDPlayerStruct
             jvm->DetachCurrentThread();
         }
 
-        libvlc_video_set_aspect_ratio(mp, "0:0");
+        libvlc_video_set_aspect_ratio(mp, "16:9");
         libvlc_video_set_scale(mp, 1.0f);
         libvlc_video_set_spu(mp, -1);
 
         libvlc_event_manager_t *eventManager = libvlc_media_player_event_manager(mp);
-        libvlc_event_attach(eventManager, libvlc_MediaPlayerTitleChanged, onChapterChanged, this);
-        libvlc_event_attach(eventManager, libvlc_MediaPlayerChapterChanged, onChapterChanged, this);
+        libvlc_event_attach(eventManager, libvlc_MediaPlayerLengthChanged, onChapterChanged, this);
+        // libvlc_event_attach(eventManager, libvlc_MediaPlayerTitleChanged, onChapterChanged, this);
+        // libvlc_event_attach(eventManager, libvlc_MediaPlayerChapterChanged, onChapterChanged, this);
 
         decodeReady = true;
 
@@ -236,14 +237,7 @@ struct DVDPlayerStruct
 
         if (mp)
         {
-            // 再生停止
-            libvlc_media_player_stop(mp);
-
-            // コールバック無効化
-            libvlc_video_set_callbacks(mp, nullptr, nullptr, nullptr, nullptr);
-            libvlc_video_set_format(mp, nullptr, 0, 0, 0);
-
-            decodeReady = false;
+            libvlc_media_player_pause(mp);
         }
     }
 
@@ -307,11 +301,12 @@ struct DVDPlayerStruct
 
     int getFrame(unsigned char *out)
     {
-        std::lock_guard<std::mutex> lock(frameMutex);
-        if (frameBuffer.empty())
+        if (frameBuffer.empty() || !frameMutex.try_lock())
             return 0;
 
         std::memcpy(out, frameBuffer.data(), frameBuffer.size());
+
+        frameMutex.unlock();
         return frameBuffer.size();
     }
 };
