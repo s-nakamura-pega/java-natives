@@ -211,27 +211,4 @@ extern "C"
     return player->isStarted() ? JNI_TRUE : JNI_FALSE;
   }
 
-  // ===============================
-  // DVDCanvas.getFrame(byte[])
-  // ===============================
-  JNIEXPORT jint JNICALL Java_sn_tools_natives_swing_canvas_DVDCanvas_getFrame(JNIEnv *env, jobject obj, jbyteArray buffer)
-  {
-    jclass cls = env->GetObjectClass(obj);
-    jmethodID mid = env->GetMethodID(cls, "getHandleId", "()J");
-    jlong handle = env->CallLongMethod(obj, mid);
-
-    if (handle == 0)
-      return 0;
-
-    auto *player = reinterpret_cast<DVDPlayerStruct *>(handle);
-
-    jbyte *buf = env->GetByteArrayElements(buffer, nullptr);
-
-    int size = player->getFrame(reinterpret_cast<unsigned char *>(buf));
-
-    env->ReleaseByteArrayElements(buffer, buf, 0);
-
-    return size;
-  }
-
 } // extern "C"

@@ -32,7 +32,7 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	};
 
 	@Override
-	public void initCanvas(int width, int height) {
+	public synchronized void initCanvas(int width, int height) {
 		this.w = width;
 		this.h = height;
 		this.frameBuffer = new byte[w * h * 3];
@@ -40,13 +40,13 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	}
 
 	@Override
-	public void repaintCallback() {
+	public synchronized void display(byte[] buffer) {
 		if (handleId == 0) {
 			return;
 		}
-		int size = getFrame(frameBuffer);
+		int size = buffer.length;
 		if (size > 0) {
-			img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
+			img.getRaster().setDataElements(0, 0, w, h, buffer);
 			paintComponent();
 		}
 	}
@@ -158,7 +158,7 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 		return currentPoint;
 	}
 
-	public void setCurrentPoint(long currentPoint) {
+	public synchronized void setCurrentPoint(long currentPoint) {
 		this.currentPoint = currentPoint;
 		SwingUtilities.invokeLater(() -> pointRenderer.accept(currentPoint));
 	}

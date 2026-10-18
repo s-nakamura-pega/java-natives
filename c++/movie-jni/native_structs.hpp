@@ -89,7 +89,6 @@ struct PlayerStruct
 
     // frame buffer (RGB24)
     std::mutex frameMutex;
-    std::vector<uint8_t> frameBuffer;
     int frameWidth = 0;
     int frameHeight = 0;
 
@@ -253,8 +252,6 @@ struct PlayerStruct
                 frameWidth, frameHeight, decCtx->pix_fmt,
                 frameWidth, frameHeight, AV_PIX_FMT_RGB24,
                 SWS_BILINEAR, nullptr, nullptr, nullptr);
-
-            frameBuffer.resize(frameWidth * frameHeight * 3);
         }
 
         // audio codec
@@ -343,7 +340,8 @@ struct PlayerStruct
             jvm->AttachCurrentThread((void **)&env, nullptr);
 
             jclass cls = env->GetObjectClass(javaCanvasObj);
-            jmethodID repaintMid = env->GetMethodID(cls, "repaintCallback", "()V");
+            jmethodID displayMid = env->GetMethodID(cls, "display", "([B)V");
+            jmethodID setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(J)V");
 
             AVFrame *frame = av_frame_alloc();
             AVFrame *rgbFrame = av_frame_alloc();
@@ -352,6 +350,10 @@ struct PlayerStruct
             rgbFrame->width = frameWidth;
             rgbFrame->height = frameHeight;
             av_frame_get_buffer(rgbFrame, 32);
+
+            int dataSize = frameWidth * frameHeight * 3;
+            // byte[]生成
+            jbyteArray byteArray = env->NewByteArray(dataSize);
 
             while (running)
             {
@@ -408,10 +410,6 @@ struct PlayerStruct
                     }
                     videoPtsMs = pts_ms;
 
-                    jclass clsLocal = env->GetObjectClass(javaCanvasObj);
-                    jmethodID setPointMid = env->GetMethodID(clsLocal, "setCurrentPoint", "(J)V");
-                    env->CallVoidMethod(javaCanvasObj, setPointMid, (jlong)pts_ms);
-
                     sws_scale(
                         swsCtx,
                         frame->data, frame->linesize,
@@ -420,11 +418,14 @@ struct PlayerStruct
 
                     {
                         std::lock_guard<std::mutex> lock(frameMutex);
-                        std::memcpy(frameBuffer.data(), rgbFrame->data[0],
-                                    frameWidth * frameHeight * 3);
+                        env->SetByteArrayRegion(
+                            byteArray,
+                            0,
+                            dataSize,
+                            reinterpret_cast<jbyte *>(rgbFrame->data[0]));
+                            env->CallVoidMethod(javaCanvasObj, displayMid, byteArray);
+                            env->CallVoidMethod(javaCanvasObj, setPointMid, (jlong)pts_ms);
                     }
-
-                    env->CallVoidMethod(javaCanvasObj, repaintMid);
                 }
 
             av_packet_free(&pkt);
@@ -611,16 +612,8 @@ struct PlayerStruct
     {
         return decodeReady;
     }
-    bool isStarted() const { return playing; }
 
-    int getFrame(unsigned char *out)
-    {
-        std::lock_guard<std::mutex> lock(frameMutex);
-        if (frameBuffer.empty())
-            return 0;
-        std::memcpy(out, frameBuffer.data(), frameBuffer.size());
-        return (int)frameBuffer.size();
-    }
+    bool isStarted() const { return playing; }
 
     PlayerStruct(const PlayerStruct &) = delete;
     PlayerStruct &operator=(const PlayerStruct &) = delete;

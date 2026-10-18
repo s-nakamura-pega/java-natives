@@ -8,7 +8,6 @@
 #include <vector>
 #include <string>
 #include <atomic>
-#include <cstring>
 
 struct DVDPlayerStruct
 {
@@ -25,6 +24,10 @@ struct DVDPlayerStruct
     int frameWidth = 1920;
     int frameHeight = 1080;
 
+    int dataSize = frameWidth * frameHeight * 3;
+    // byte[]生成
+    jbyteArray byteArray = nullptr;
+
     std::atomic<bool> decodeReady{false};
     std::atomic<bool> playing{false};
 
@@ -34,6 +37,9 @@ struct DVDPlayerStruct
         JNIEnv *env = nullptr;
         jvm->AttachCurrentThread((void **)&env, nullptr);
         javaCanvasObj = env->NewGlobalRef(canvasObj);
+        jbyteArray localArray = env->NewByteArray(dataSize);
+        byteArray = (jbyteArray)env->NewGlobalRef(localArray);
+        env->DeleteLocalRef(localArray);
         jvm->DetachCurrentThread();
 
         const char *args[] = {
@@ -67,6 +73,7 @@ struct DVDPlayerStruct
         {
             JNIEnv *env = nullptr;
             jvm->AttachCurrentThread((void **)&env, nullptr);
+            env->DeleteGlobalRef(byteArray);
             env->DeleteGlobalRef(javaCanvasObj);
             jvm->DetachCurrentThread();
             javaCanvasObj = nullptr;
@@ -98,8 +105,13 @@ struct DVDPlayerStruct
         self->jvm->AttachCurrentThread((void **)&env, nullptr);
 
         jclass cls = env->GetObjectClass(self->javaCanvasObj);
-        jmethodID mid = env->GetMethodID(cls, "repaintCallback", "()V");
-        env->CallVoidMethod(self->javaCanvasObj, mid);
+        jmethodID displayMid = env->GetMethodID(cls, "display", "([B)V");
+        env->SetByteArrayRegion(
+            self->byteArray,
+            0,
+            self->dataSize,
+            reinterpret_cast<jbyte *>(self->frameBuffer.data()));
+        env->CallVoidMethod(self->javaCanvasObj, displayMid, self->byteArray);
 
         long currentMs = libvlc_media_player_get_time(self->mp);
         jmethodID setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(J)V");
@@ -298,15 +310,4 @@ struct DVDPlayerStruct
 
     bool isDecodeReady() const { return decodeReady; }
     bool isStarted() const { return playing; }
-
-    int getFrame(unsigned char *out)
-    {
-        if (frameBuffer.empty() || !frameMutex.try_lock())
-            return 0;
-
-        std::memcpy(out, frameBuffer.data(), frameBuffer.size());
-
-        frameMutex.unlock();
-        return frameBuffer.size();
-    }
 };

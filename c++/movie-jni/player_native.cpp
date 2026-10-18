@@ -162,26 +162,4 @@ extern "C"
 
     return player->isStarted() ? JNI_TRUE : JNI_FALSE;
   }
-
-  // MovieCanvas.getFrame(byte[])
-  JNIEXPORT jint JNICALL Java_sn_tools_natives_swing_canvas_MovieCanvas_getFrame(JNIEnv *env, jobject obj, jbyteArray buffer)
-  {
-
-    jclass cls = env->GetObjectClass(obj);
-    jmethodID mid = env->GetMethodID(cls, "getHandleId", "()J");
-    jlong handle = env->CallLongMethod(obj, mid);
-
-    if (handle == 0)
-      return 0;
-
-    PlayerStruct *player = reinterpret_cast<PlayerStruct *>(handle);
-
-    jbyte *buf = env->GetByteArrayElements(buffer, nullptr);
-
-    int size = player->getFrame(reinterpret_cast<unsigned char *>(buf));
-
-    env->ReleaseByteArrayElements(buffer, buf, 0);
-
-    return size;
-  }
 }

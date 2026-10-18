@@ -48,9 +48,6 @@ class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
 	}
 
 	@Override
-	public native int getFrame(byte[] buffer);
-
-	@Override
 	public long setData(byte[] data) {
 		String tempDir = System.getProperty("java.io.tmpdir");
 
@@ -113,7 +110,7 @@ class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
 	public native void sendKey(int key);
 
 	@Override
-	public void changeDuration(long duration) {
+	public synchronized void changeDuration(long duration) {
 		this.duration = duration;
 		SwingUtilities.invokeLater(() -> durationRenderer.accept(duration));
 	}

@@ -16,9 +16,6 @@ class MovieCanvas extends AbstractMovieCanvas implements Movie {
 	}
 
 	@Override
-	public native int getFrame(byte[] buffer);
-
-	@Override
 	public long setData(byte[] data) {
 		String tempDir = System.getProperty("java.io.tmpdir");
 
