@@ -5,7 +5,7 @@
 	<groupId>sn.tools</groupId>
 	<artifactId>demo-dvd</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>demo-movie</name>
+	<name>demo-dvd</name>
 	<packaging>jar</packaging>
 
 	<properties>
@@ -21,4 +21,30 @@
 			<version>0.0.1-SNAPSHOT</version>
 		</dependency>
 	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<version>3.5.0</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<transformers>
+								<transformer
+									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>sn.tools.demo.dvd.system.SystemMain</mainClass>
+								</transformer>
+							</transformers>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
 </project>

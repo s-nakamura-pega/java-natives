@@ -10,6 +10,8 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.Timer;
+
+import sn.tools.demo.movie.icon.MoviePlayerImage;
 import sn.tools.natives.swing.canvas.MovieCanvasComponent;
 
 public class MovieFrame extends JFrame {
@@ -30,6 +32,7 @@ public class MovieFrame extends JFrame {
 
 	public MovieFrame() {
 		super("Movie Player");
+		setIconImage(new MoviePlayerImage(64, 64));
 		setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		setLayout(new BorderLayout());
 

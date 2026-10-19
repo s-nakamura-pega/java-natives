@@ -13,6 +13,7 @@ import javax.swing.JSlider;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
+import sn.tools.demo.dvd.icon.DVDPlayerImage;
 import sn.tools.natives.swing.canvas.DVDCanvasComponent;
 
 public class DVDMovieFrame extends JFrame {
@@ -34,7 +35,8 @@ public class DVDMovieFrame extends JFrame {
 	private double seekValueScale = 0.0;
 
 	public DVDMovieFrame() {
-		super("Movie Player");
+		super("DVD Player");
+		setIconImage(new DVDPlayerImage(64, 64));
 		setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		setLayout(new BorderLayout());
 
