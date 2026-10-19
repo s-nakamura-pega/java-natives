@@ -10,6 +10,7 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import sn.tools.natives.swing.canvas.DVDCanvasComponent;
@@ -145,6 +146,10 @@ public class DVDMovieFrame extends JFrame {
 			updatePlayButtonState();
 			System.out.println("動画読み込み成功: " + file.getName());
 			canvas.start();
+			canvas.setFocusable(true);
+			SwingUtilities.invokeLater(() -> {
+				canvas.requestFocusInWindow();
+			});
 		} else {
 			System.err.println("動画読み込み失敗");
 			JOptionPane.showMessageDialog(this, "動画の読み込みに失敗しました。", "エラー", JOptionPane.ERROR_MESSAGE);

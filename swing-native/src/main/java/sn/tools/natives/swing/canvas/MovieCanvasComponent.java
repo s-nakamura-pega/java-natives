@@ -1,11 +1,16 @@
 package sn.tools.natives.swing.canvas;
 
 import javax.swing.JComponent;
+import javax.swing.SwingUtilities;
 
 import sn.tools.natives.swing.api.movie.Movie;
 
 import java.awt.BorderLayout;
 import java.awt.Graphics;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class MovieCanvasComponent extends JComponent implements Movie {
@@ -13,6 +18,11 @@ public class MovieCanvasComponent extends JComponent implements Movie {
     private static final long serialVersionUID = 1L;
 
     private MovieCanvas movieCanvas;
+
+    private final ScheduledExecutorService scheduler = Executors
+            .newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
+
+    private ScheduledFuture<?> future;
 
     public MovieCanvasComponent() {
         super();
@@ -74,7 +84,14 @@ public class MovieCanvasComponent extends JComponent implements Movie {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        movieCanvas.paintComponent();
+
+        if (future != null) {
+            future.cancel(false);
+        }
+
+        future = scheduler.schedule(() -> SwingUtilities.invokeLater(() -> movieCanvas.paintComponent()),
+                300,
+                TimeUnit.MILLISECONDS);
     }
 
 }

@@ -245,6 +245,9 @@ struct DVDPlayerStruct
     // ==========================
     void stop()
     {
+        if (!playing)
+            return;
+
         playing = false;
 
         if (mp)
