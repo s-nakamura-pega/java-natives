@@ -105,6 +105,8 @@ struct PlayerStruct
     jobject javaCanvasObj = nullptr;
     std::mutex fmtMutex;
 
+    std::vector<uint8_t> frameBuffer;
+
     PlayerStruct(JavaVM *vm, jobject canvasObj)
         : jvm(vm)
     {
@@ -340,20 +342,25 @@ struct PlayerStruct
             jvm->AttachCurrentThread((void **)&env, nullptr);
 
             jclass cls = env->GetObjectClass(javaCanvasObj);
-            jmethodID displayMid = env->GetMethodID(cls, "display", "([B)V");
+            jmethodID displayMid = env->GetMethodID(cls, "display", "(Ljava/nio/ByteBuffer;)V");
             jmethodID setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(J)V");
 
             AVFrame *frame = av_frame_alloc();
-            AVFrame *rgbFrame = av_frame_alloc();
-
-            rgbFrame->format = AV_PIX_FMT_RGB24;
-            rgbFrame->width = frameWidth;
-            rgbFrame->height = frameHeight;
-            av_frame_get_buffer(rgbFrame, 32);
 
             int dataSize = frameWidth * frameHeight * 3;
-            // byte[]生成
-            jbyteArray byteArray = env->NewByteArray(dataSize);
+            frameBuffer.resize(dataSize);
+            jobject directBuffer = env->NewDirectByteBuffer(frameBuffer.data(), dataSize);
+
+            uint8_t *dstData[4] = {
+                frameBuffer.data(),
+                nullptr,
+                nullptr,
+                nullptr};
+            int dstLinesize[4] = {
+                frameWidth * 3,
+                0,
+                0,
+                0};
 
             while (running)
             {
@@ -412,26 +419,27 @@ struct PlayerStruct
 
                     sws_scale(
                         swsCtx,
-                        frame->data, frame->linesize,
-                        0, frameHeight,
-                        rgbFrame->data, rgbFrame->linesize);
+                        frame->data,
+                        frame->linesize,
+                        0,
+                        frameHeight,
+                        dstData,
+                        dstLinesize);
 
-                    {
-                        std::lock_guard<std::mutex> lock(frameMutex);
-                        env->SetByteArrayRegion(
-                            byteArray,
-                            0,
-                            dataSize,
-                            reinterpret_cast<jbyte *>(rgbFrame->data[0]));
-                            env->CallVoidMethod(javaCanvasObj, displayMid, byteArray);
-                            env->CallVoidMethod(javaCanvasObj, setPointMid, (jlong)pts_ms);
-                    }
+                    env->CallVoidMethod(
+                        javaCanvasObj,
+                        displayMid,
+                        directBuffer);
+
+                    env->CallVoidMethod(
+                        javaCanvasObj,
+                        setPointMid,
+                        (jlong)pts_ms);
                 }
 
             av_packet_free(&pkt);
             }
 
-            av_frame_free(&rgbFrame);
             av_frame_free(&frame);
 
             jvm->DetachCurrentThread(); });

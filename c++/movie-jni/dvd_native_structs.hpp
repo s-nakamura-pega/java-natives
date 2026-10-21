@@ -17,6 +17,8 @@ struct DVDPlayerStruct
 
     JavaVM *jvm = nullptr;
     jobject javaCanvasObj = nullptr;
+    jmethodID displayMid = nullptr;
+    jmethodID setPointMid = nullptr;
 
     std::mutex frameMutex;
     std::vector<uint8_t> frameBuffer;
@@ -25,8 +27,8 @@ struct DVDPlayerStruct
     int frameHeight = 1080;
 
     int dataSize = frameWidth * frameHeight * 3;
-    // byte[]生成
-    jbyteArray byteArray = nullptr;
+    // ByteBuffer
+    jobject byteBuffer = nullptr;
 
     std::atomic<bool> decodeReady{false};
     std::atomic<bool> playing{false};
@@ -34,12 +36,16 @@ struct DVDPlayerStruct
     DVDPlayerStruct(JavaVM *vm, jobject canvasObj)
         : jvm(vm)
     {
+        frameBuffer.resize(dataSize);
         JNIEnv *env = nullptr;
         jvm->AttachCurrentThread((void **)&env, nullptr);
         javaCanvasObj = env->NewGlobalRef(canvasObj);
-        jbyteArray localArray = env->NewByteArray(dataSize);
-        byteArray = (jbyteArray)env->NewGlobalRef(localArray);
-        env->DeleteLocalRef(localArray);
+        jobject localJobject = env->NewDirectByteBuffer(frameBuffer.data(), dataSize);
+        byteBuffer = env->NewGlobalRef(localJobject);
+        env->DeleteLocalRef(localJobject);
+        jclass cls = env->GetObjectClass(canvasObj);
+        displayMid = env->GetMethodID(cls, "display", "(Ljava/nio/ByteBuffer;)V");
+        setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(J)V");
         jvm->DetachCurrentThread();
 
         const char *args[] = {
@@ -73,7 +79,7 @@ struct DVDPlayerStruct
         {
             JNIEnv *env = nullptr;
             jvm->AttachCurrentThread((void **)&env, nullptr);
-            env->DeleteGlobalRef(byteArray);
+            env->DeleteGlobalRef(byteBuffer);
             env->DeleteGlobalRef(javaCanvasObj);
             jvm->DetachCurrentThread();
             javaCanvasObj = nullptr;
@@ -104,18 +110,10 @@ struct DVDPlayerStruct
         JNIEnv *env = nullptr;
         self->jvm->AttachCurrentThread((void **)&env, nullptr);
 
-        jclass cls = env->GetObjectClass(self->javaCanvasObj);
-        jmethodID displayMid = env->GetMethodID(cls, "display", "([B)V");
-        env->SetByteArrayRegion(
-            self->byteArray,
-            0,
-            self->dataSize,
-            reinterpret_cast<jbyte *>(self->frameBuffer.data()));
-        env->CallVoidMethod(self->javaCanvasObj, displayMid, self->byteArray);
+        env->CallVoidMethod(self->javaCanvasObj, self->displayMid, self->byteBuffer);
 
         long currentMs = libvlc_media_player_get_time(self->mp);
-        jmethodID setPointMid = env->GetMethodID(cls, "setCurrentPoint", "(J)V");
-        env->CallVoidMethod(self->javaCanvasObj, setPointMid, (jlong)currentMs);
+        env->CallVoidMethod(self->javaCanvasObj, self->setPointMid, (jlong)currentMs);
 
         self->jvm->DetachCurrentThread();
     }
@@ -156,8 +154,6 @@ struct DVDPlayerStruct
         }
 
         mp = libvlc_media_player_new(vlc);
-
-        frameBuffer.resize(frameWidth * frameHeight * 3);
 
         libvlc_video_set_callbacks(
             mp,
@@ -307,6 +303,22 @@ struct DVDPlayerStruct
             break;
         case 77:
             libvlc_media_player_set_title(mp, 0);
+            break;
+        case 70:
+            skip(true);
+            break;
+        case 66:
+            skip(false);
+            break;
+        case 32:
+            if (playing)
+            {
+                stop();
+            }
+            else
+            {
+                start();
+            }
             break;
         }
     }

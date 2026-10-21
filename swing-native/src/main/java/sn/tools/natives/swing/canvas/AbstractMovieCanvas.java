@@ -7,6 +7,7 @@ import java.awt.Toolkit;
 import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -40,13 +41,11 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	}
 
 	@Override
-	public synchronized void display(byte[] buffer) {
-		if (handleId == 0) {
-			return;
-		}
-		int size = buffer.length;
-		if (size > 0) {
-			img.getRaster().setDataElements(0, 0, w, h, buffer);
+	public synchronized void display(ByteBuffer buffer) {
+		buffer.rewind();
+		buffer.get(frameBuffer);
+		if (frameBuffer.length > 0) {
+			img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
 			paintComponent();
 		}
 	}
