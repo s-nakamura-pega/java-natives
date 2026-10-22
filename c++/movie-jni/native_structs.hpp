@@ -401,7 +401,7 @@ struct PlayerStruct
                         if (diff < -videoPtsDiff)
                         {
                             // ★ 描画せず、次のフレームを取りに行く
-                            break;
+                            continue;
                         }
 
                         // 映像が先行 → 最大50ms待つ
