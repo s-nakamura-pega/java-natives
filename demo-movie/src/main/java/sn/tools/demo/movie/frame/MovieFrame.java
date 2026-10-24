@@ -1,6 +1,7 @@
 package sn.tools.demo.movie.frame;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.File;
 import javax.swing.JButton;
@@ -113,7 +114,8 @@ public class MovieFrame extends JFrame {
 		Timer stateTimer = new Timer(200, _ -> updatePlayButtonState());
 		stateTimer.start();
 
-		setSize(800, 600);
+		setMinimumSize(new Dimension(850, 600));
+		pack();
 		setLocationRelativeTo(null);
 	}
 

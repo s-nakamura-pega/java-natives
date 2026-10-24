@@ -21,15 +21,15 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 
 	private static final long serialVersionUID = 1L;
 
-	protected long handleId = 0;
+	private long handleId = 0;
 
-	protected BufferStrategy bufferStrategy;
-	protected int w, h;
-	protected byte[] frameBuffer;
-	protected BufferedImage img;
-	protected long currentPoint;
+	private BufferStrategy bufferStrategy;
+	private int w, h;
+	private byte[] frameBuffer;
+	private BufferedImage img;
+	private long currentPoint;
 
-	protected Consumer<Long> pointRenderer = _ -> {
+	private Consumer<Long> pointRenderer = _ -> {
 	};
 
 	@Override
@@ -53,22 +53,6 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	@Override
 	public void close() {
 		destroy();
-
-		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
-		try {
-			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(handleId));
-			if (Files.exists(dir)) {
-				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
-						.forEach(p -> {
-							try {
-								Files.deleteIfExists(p);
-							} catch (IOException ignored) {
-							}
-						});
-			}
-		} catch (IOException ignored) {
-		}
-
 		handleId = 0;
 	}
 

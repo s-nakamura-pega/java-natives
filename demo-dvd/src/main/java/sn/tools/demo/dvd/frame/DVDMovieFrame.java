@@ -3,8 +3,13 @@ package sn.tools.demo.dvd.frame;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.awt.event.KeyEvent;
 import java.io.File;
+
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
@@ -12,6 +17,7 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.border.Border;
 
 import sn.tools.demo.dvd.icon.DVDPlayerImage;
 import sn.tools.natives.swing.canvas.DVDCanvasComponent;
@@ -28,6 +34,11 @@ public class DVDMovieFrame extends JFrame {
 	private final JButton forwardButton;
 	private final JButton backButton;
 	private final JButton loadButton;
+	private final JButton upButton;
+	private final JButton downButton;
+	private final JButton leftButton;
+	private final JButton rightButton;
+	private final JButton enterButton;
 	private final JSlider seekBar;
 	private boolean isSeekInnerUpdate = false;
 	private boolean isMovingPoint = false;
@@ -51,12 +62,17 @@ public class DVDMovieFrame extends JFrame {
 		add(filePanel, BorderLayout.NORTH);
 
 		// --- south: 操作パネル ---
-		JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
 
 		playButton = new JButton("▶ 再生");
 		stopButton = new JButton("■ 停止");
 		backButton = new JButton("|◀◀");
 		forwardButton = new JButton("▶▶|");
+		upButton = new JButton("↑");
+		downButton = new JButton("↓");
+		leftButton = new JButton("←");
+		rightButton = new JButton("→");
+		enterButton = new JButton("ENT");
 
 		seekBar = new JSlider(0, SEEK_BAR_MAX, 0);
 		seekBar.setPreferredSize(new Dimension(300, 30));
@@ -65,6 +81,7 @@ public class DVDMovieFrame extends JFrame {
 		controlPanel.add(stopButton);
 		controlPanel.add(backButton);
 		controlPanel.add(forwardButton);
+		controlPanel.add(createKeyJPanel());
 		controlPanel.add(seekBar);
 
 		add(controlPanel, BorderLayout.SOUTH);
@@ -98,6 +115,12 @@ public class DVDMovieFrame extends JFrame {
 		forwardButton.addActionListener(_ -> canvas.skip(true));
 
 		backButton.addActionListener(_ -> canvas.skip(false));
+
+		upButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_UP));
+		downButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_DOWN));
+		leftButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_LEFT));
+		rightButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_RIGHT));
+		enterButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_ENTER));
 
 		// --- シークバー操作 ---
 		seekBar.addChangeListener(_ -> {
@@ -136,8 +159,35 @@ public class DVDMovieFrame extends JFrame {
 		Timer stateTimer = new Timer(200, _ -> updatePlayButtonState());
 		stateTimer.start();
 
-		setSize(800, 600);
+		setMinimumSize(new Dimension(850, 600));
+		pack();
 		setLocationRelativeTo(null);
+	}
+
+	private JPanel createKeyJPanel() {
+		JPanel panel = new JPanel();
+		panel.setLayout(new GridLayout(3, 3, 5, 5));
+		panel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+		Dimension size = new Dimension(60, 30);
+		upButton.setPreferredSize(size);
+		downButton.setPreferredSize(size);
+		leftButton.setPreferredSize(size);
+		rightButton.setPreferredSize(size);
+		enterButton.setPreferredSize(size);
+		panel.add(new JComponent() {
+		});
+		panel.add(upButton);
+		panel.add(new JComponent() {
+		});
+		panel.add(leftButton);
+		panel.add(enterButton);
+		panel.add(rightButton);
+		panel.add(new JComponent() {
+		});
+		panel.add(downButton);
+		panel.add(new JComponent() {
+		});
+		return panel;
 	}
 
 	private void loadMovieFile(File file) {

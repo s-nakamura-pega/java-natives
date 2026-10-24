@@ -19,7 +19,7 @@ class MovieCanvas extends AbstractMovieCanvas implements Movie {
 	public long setData(byte[] data) {
 		String tempDir = System.getProperty("java.io.tmpdir");
 
-		Path dir = Paths.get(tempDir, "moviecanvas", String.valueOf(handleId));
+		Path dir = Paths.get(tempDir, "moviecanvas", String.valueOf(getHandleId()));
 		try {
 			Files.createDirectories(dir);
 		} catch (IOException e) {
@@ -38,6 +38,25 @@ class MovieCanvas extends AbstractMovieCanvas implements Movie {
 	}
 
 	@Override
+	public void close() {
+		super.close();
+		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
+		try {
+			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(getHandleId()));
+			if (Files.exists(dir)) {
+				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
+						.forEach(p -> {
+							try {
+								Files.deleteIfExists(p);
+							} catch (IOException ignored) {
+							}
+						});
+			}
+		} catch (IOException ignored) {
+		}
+	}
+
+	@Override
 	public native void start();
 
 	@Override
@@ -50,12 +69,9 @@ class MovieCanvas extends AbstractMovieCanvas implements Movie {
 	public native boolean isDecodeReady();
 
 	@Override
-	public long getHandleId() {
-		return handleId;
-	}
-
 	protected native long create();
 
+	@Override
 	protected native void destroy();
 
 	@Override

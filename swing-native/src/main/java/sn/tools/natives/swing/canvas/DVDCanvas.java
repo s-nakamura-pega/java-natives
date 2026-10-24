@@ -51,7 +51,7 @@ class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
 	public long setData(byte[] data) {
 		String tempDir = System.getProperty("java.io.tmpdir");
 
-		Path dir = Paths.get(tempDir, "moviecanvas", String.valueOf(handleId));
+		Path dir = Paths.get(tempDir, "moviecanvas", String.valueOf(getHandleId()));
 		try {
 			Files.createDirectories(dir);
 		} catch (IOException e) {
@@ -66,6 +66,25 @@ class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
 			return setFile(tempFile.toAbsolutePath().toString());
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
+		}
+	}
+
+	@Override
+	public void close() {
+		super.close();
+		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
+		try {
+			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(getHandleId()));
+			if (Files.exists(dir)) {
+				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
+						.forEach(p -> {
+							try {
+								Files.deleteIfExists(p);
+							} catch (IOException ignored) {
+							}
+						});
+			}
+		} catch (IOException ignored) {
 		}
 	}
 
@@ -93,8 +112,10 @@ class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
 		super.removeNotify();
 	}
 
+	@Override
 	protected native long create();
 
+	@Override
 	protected native void destroy();
 
 	@Override
