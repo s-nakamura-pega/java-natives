@@ -100,6 +100,9 @@ struct PlayerStruct
 
     int sampleRate = 48000;
 
+    const size_t MAX_VIDEO_QUEUE = 30;
+    const size_t MAX_AUDIO_QUEUE = 100;
+
     // Java
     JavaVM *jvm = nullptr;
     jobject javaCanvasObj = nullptr;
