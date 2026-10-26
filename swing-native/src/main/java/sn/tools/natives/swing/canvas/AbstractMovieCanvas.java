@@ -21,22 +21,24 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	private long handleId = 0;
 
 	private BufferStrategy bufferStrategy;
-	private int w, h;
+	private int movieWidth, movieHeight;
 	private byte[] frameBuffer;
 	private BufferedImage img;
 	private long currentPoint;
 	private boolean isUseRasterTransfer;
+
+	private int drawX, drawY, draWidth, drawHeight;
 
 	private Consumer<Long> pointRenderer = _ -> {
 	};
 
 	@Override
 	public synchronized void initCanvas(int width, int height, boolean isUseRasterTransfer) {
-		this.w = width;
-		this.h = height;
+		this.movieWidth = width;
+		this.movieHeight = height;
 		this.isUseRasterTransfer = isUseRasterTransfer;
-		this.img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
-		this.frameBuffer = isUseRasterTransfer ? new byte[w * h * 3]
+		this.img = new BufferedImage(movieWidth, movieHeight, BufferedImage.TYPE_3BYTE_BGR);
+		this.frameBuffer = isUseRasterTransfer ? new byte[width * height * 3]
 				: ((DataBufferByte) (img.getRaster().getDataBuffer())).getData();
 	}
 
@@ -46,7 +48,7 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 		buffer.get(frameBuffer);
 		if (frameBuffer.length > 0) {
 			if (isUseRasterTransfer) {
-				img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
+				img.getRaster().setDataElements(0, 0, movieWidth, movieHeight, frameBuffer);
 			}
 			paintComponent();
 		}
@@ -81,8 +83,8 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 				int ch = getHeight();
 
 				// 元の動画サイズ
-				double iw = w;
-				double ih = h;
+				double iw = movieWidth;
+				double ih = movieHeight;
 
 				// コンポーネントのアスペクト比
 				double aspectCanvas = (double) cw / ch;
@@ -106,6 +108,11 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 				int y = (ch - drawH) / 2;
 
 				g.drawImage(img, x, y, drawW, drawH, null);
+
+				this.drawX = x;
+				this.drawY = y;
+				this.draWidth = drawW;
+				this.drawHeight = drawH;
 			} finally {
 				g.dispose();
 			}
@@ -155,6 +162,34 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	@Override
 	public void setHandleId(long handleId) {
 		this.handleId = handleId;
+	}
+
+	public int getMovieWidth() {
+		return movieWidth;
+	}
+
+	public int getMovieHeight() {
+		return movieHeight;
+	}
+
+	public boolean isUseRasterTransfer() {
+		return isUseRasterTransfer;
+	}
+
+	public int getDrawX() {
+		return drawX;
+	}
+
+	public int getDrawY() {
+		return drawY;
+	}
+
+	public int getDraWidth() {
+		return draWidth;
+	}
+
+	public int getDrawHeight() {
+		return drawHeight;
 	}
 
 	protected abstract long create();
