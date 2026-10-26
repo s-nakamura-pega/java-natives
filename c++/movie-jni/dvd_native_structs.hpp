@@ -212,13 +212,14 @@ struct DVDPlayerStruct
                 env->GetMethodID(
                     cls,
                     "initCanvas",
-                    "(II)V");
+                    "(IIZ)V");
 
             env->CallVoidMethod(
                 javaCanvasObj,
                 mid,
                 frameWidth,
-                frameHeight);
+                frameHeight,
+                true);
             jvm->DetachCurrentThread();
         }
 

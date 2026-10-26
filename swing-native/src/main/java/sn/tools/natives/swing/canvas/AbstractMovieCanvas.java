@@ -6,6 +6,7 @@ import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 
@@ -24,16 +25,19 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	private byte[] frameBuffer;
 	private BufferedImage img;
 	private long currentPoint;
+	private boolean isUseRasterTransfer;
 
 	private Consumer<Long> pointRenderer = _ -> {
 	};
 
 	@Override
-	public synchronized void initCanvas(int width, int height) {
+	public synchronized void initCanvas(int width, int height, boolean isUseRasterTransfer) {
 		this.w = width;
 		this.h = height;
-		this.frameBuffer = new byte[w * h * 3];
+		this.isUseRasterTransfer = isUseRasterTransfer;
 		this.img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+		this.frameBuffer = isUseRasterTransfer ? new byte[w * h * 3]
+				: ((DataBufferByte) (img.getRaster().getDataBuffer())).getData();
 	}
 
 	@Override
@@ -41,7 +45,9 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 		buffer.rewind();
 		buffer.get(frameBuffer);
 		if (frameBuffer.length > 0) {
-			img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
+			if (isUseRasterTransfer) {
+				img.getRaster().setDataElements(0, 0, w, h, frameBuffer);
+			}
 			paintComponent();
 		}
 	}

@@ -255,7 +255,7 @@ struct PlayerStruct
 
             swsCtx = sws_getContext(
                 frameWidth, frameHeight, decCtx->pix_fmt,
-                frameWidth, frameHeight, AV_PIX_FMT_RGB24,
+                frameWidth, frameHeight, AV_PIX_FMT_BGR24,
                 SWS_BILINEAR, nullptr, nullptr, nullptr);
         }
 
@@ -320,8 +320,8 @@ struct PlayerStruct
             JNIEnv *env = nullptr;
             jvm->AttachCurrentThread((void **)&env, nullptr);
             jclass cls = env->GetObjectClass(javaCanvasObj);
-            jmethodID mid = env->GetMethodID(cls, "initCanvas", "(II)V");
-            env->CallVoidMethod(javaCanvasObj, mid, frameWidth, frameHeight);
+            jmethodID mid = env->GetMethodID(cls, "initCanvas", "(IIZ)V");
+            env->CallVoidMethod(javaCanvasObj, mid, frameWidth, frameHeight, false);
             jvm->DetachCurrentThread();
         }
 
@@ -550,7 +550,21 @@ struct PlayerStruct
                                  {
             AVPacket *pkt = av_packet_alloc();
 
-            while (running) {
+            while (running)
+            {
+                bool isOverMaxQueue = false;
+
+                {
+                    std::lock_guard<std::mutex> queueLock(queueMutex);
+                    isOverMaxQueue = (videoQueue.size() > MAX_VIDEO_QUEUE) || (audioQueue.size() > MAX_AUDIO_QUEUE);
+                }
+
+                if (isOverMaxQueue)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    continue;
+                }
+
                 int ret = av_read_frame(fmtCtx, pkt);
 
                 if (ret == AVERROR(EAGAIN)) {
