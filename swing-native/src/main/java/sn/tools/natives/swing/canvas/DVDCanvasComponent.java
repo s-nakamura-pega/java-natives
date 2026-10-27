@@ -31,10 +31,6 @@ public class DVDCanvasComponent extends JComponent implements DiscPlayer {
         add(canvas, BorderLayout.CENTER);
     }
 
-    public DVDCanvas getCanvas() {
-        return canvas;
-    }
-
     @Override
     public long setFile(String file) {
         return canvas.setFile(file);
@@ -115,6 +111,11 @@ public class DVDCanvasComponent extends JComponent implements DiscPlayer {
     @Override
     public void setChangeDurationRenderer(Consumer<Long> durationRenderer) {
         canvas.setChangeDurationRenderer(durationRenderer);
+    }
+
+    @Override
+    public void sendMouseEvent(int x, int y, boolean isClick) {
+        canvas.sendMouseEvent(x, y, isClick);
     }
 
 }

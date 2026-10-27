@@ -39,6 +39,7 @@ public class DVDMovieFrame extends JFrame {
 	private final JButton leftButton;
 	private final JButton rightButton;
 	private final JButton enterButton;
+	private final JButton menuButton;
 	private final JSlider seekBar;
 	private boolean isSeekInnerUpdate = false;
 	private boolean isMovingPoint = false;
@@ -73,6 +74,7 @@ public class DVDMovieFrame extends JFrame {
 		leftButton = new JButton("←");
 		rightButton = new JButton("→");
 		enterButton = new JButton("ENT");
+		menuButton = new JButton("MENU");
 
 		seekBar = new JSlider(0, SEEK_BAR_MAX, 0);
 		seekBar.setPreferredSize(new Dimension(300, 30));
@@ -116,6 +118,7 @@ public class DVDMovieFrame extends JFrame {
 
 		backButton.addActionListener(_ -> canvas.skip(false));
 
+		menuButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_M));
 		upButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_UP));
 		downButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_DOWN));
 		leftButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_LEFT));
@@ -168,14 +171,14 @@ public class DVDMovieFrame extends JFrame {
 		JPanel panel = new JPanel();
 		panel.setLayout(new GridLayout(3, 3, 5, 5));
 		panel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-		Dimension size = new Dimension(60, 30);
+		Dimension size = new Dimension(70, 30);
+		menuButton.setPreferredSize(size);
 		upButton.setPreferredSize(size);
 		downButton.setPreferredSize(size);
 		leftButton.setPreferredSize(size);
 		rightButton.setPreferredSize(size);
 		enterButton.setPreferredSize(size);
-		panel.add(new JComponent() {
-		});
+		panel.add(menuButton);
 		panel.add(upButton);
 		panel.add(new JComponent() {
 		});
@@ -217,6 +220,12 @@ public class DVDMovieFrame extends JFrame {
 
 		// 再生可能条件：デコード準備完了 && 再生中ではない
 		playButton.setEnabled(ready && !started);
+		menuButton.setEnabled(ready && started);
+		leftButton.setEnabled(ready && started);
+		rightButton.setEnabled(ready && started);
+		upButton.setEnabled(ready && started);
+		downButton.setEnabled(ready && started);
+		enterButton.setEnabled(ready && started);
 	}
 
 	@Override

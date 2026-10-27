@@ -178,6 +178,24 @@ extern "C"
   }
 
   // ===============================
+  // DVDCanvas.sendMouseEvent(int, int, boolean)
+  // ===============================
+  JNIEXPORT void JNICALL Java_sn_tools_natives_swing_canvas_DVDCanvas_sendMouseEvent(JNIEnv *env, jobject obj, jint x, jint y, jboolean isClick)
+  {
+    jclass cls = env->GetObjectClass(obj);
+    jmethodID mid = env->GetMethodID(cls, "getHandleId", "()J");
+    jlong handle = env->CallLongMethod(obj, mid);
+
+    if (handle == 0)
+      return;
+
+    auto *player = reinterpret_cast<DVDPlayerStruct *>(handle);
+
+    std::cout << "[native] sendMouseEvent: x=" << x << ", y=" << y << ", isClick=" << (isClick ? "true" : "false") << std::endl;
+    player->sendMouseEvent(x, y, isClick);
+  }
+
+  // ===============================
   // DVDCanvas.isDecodeReady()
   // ===============================
   JNIEXPORT jboolean JNICALL Java_sn_tools_natives_swing_canvas_DVDCanvas_isDecodeReady(JNIEnv *env, jobject obj)

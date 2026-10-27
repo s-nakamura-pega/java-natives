@@ -440,11 +440,12 @@ struct PlayerStruct
                         (jlong)pts_ms);
                 }
 
-            av_packet_free(&pkt);
+                av_packet_free(&pkt);
             }
 
             av_frame_free(&frame);
 
+            env->DeleteLocalRef(directBuffer);
             jvm->DetachCurrentThread(); });
     }
 

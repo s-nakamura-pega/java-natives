@@ -24,10 +24,10 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 	private int movieWidth, movieHeight;
 	private byte[] frameBuffer;
 	private BufferedImage img;
-	private long currentPoint;
+	private volatile long currentPoint;
 	private boolean isUseRasterTransfer;
 
-	private int drawX, drawY, draWidth, drawHeight;
+	private volatile int drawX, drawY, drawWidth, drawHeight;
 
 	private Consumer<Long> pointRenderer = _ -> {
 	};
@@ -111,7 +111,7 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 
 				this.drawX = x;
 				this.drawY = y;
-				this.draWidth = drawW;
+				this.drawWidth = drawW;
 				this.drawHeight = drawH;
 			} finally {
 				g.dispose();
@@ -184,8 +184,8 @@ abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
 		return drawY;
 	}
 
-	public int getDraWidth() {
-		return draWidth;
+	public int getDrawWidth() {
+		return drawWidth;
 	}
 
 	public int getDrawHeight() {

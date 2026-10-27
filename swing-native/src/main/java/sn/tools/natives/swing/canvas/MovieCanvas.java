@@ -39,10 +39,11 @@ class MovieCanvas extends AbstractMovieCanvas implements Movie {
 
 	@Override
 	public void close() {
+		long handleId = getHandleId();
 		super.close();
 		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
 		try {
-			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(getHandleId()));
+			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(handleId));
 			if (Files.exists(dir)) {
 				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
 						.forEach(p -> {

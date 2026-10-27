@@ -324,6 +324,11 @@ struct DVDPlayerStruct
         }
     }
 
+    void sendMouseEvent(int x, int y, bool isClick)
+    {
+        // libVLC3では未対応
+    }
+
     bool isDecodeReady() const { return decodeReady; }
     bool isStarted() const { return playing; }
 };

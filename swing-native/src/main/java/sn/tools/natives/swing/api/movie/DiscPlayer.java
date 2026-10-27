@@ -8,6 +8,8 @@ public interface DiscPlayer extends Movie {
 
 	void sendKey(int key);
 
+	void sendMouseEvent(int x, int y, boolean isClick);
+
 	void changeDuration(long duration);
 
 	void setChangeDurationRenderer(Consumer<Long> durationRenderer);
