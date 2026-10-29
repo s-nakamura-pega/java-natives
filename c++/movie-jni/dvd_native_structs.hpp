@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <memory>
 #include <vlc/libvlc.h>
 #include <vlc/vlc.h>
 #include <jni.h>
@@ -107,15 +108,46 @@ struct DVDPlayerStruct
     {
         auto *self = static_cast<DVDPlayerStruct *>(opaque);
 
-        JNIEnv *env = nullptr;
-        self->jvm->AttachCurrentThread((void **)&env, nullptr);
+        static thread_local JavaVM *tlsJvm = nullptr;
 
-        env->CallVoidMethod(self->javaCanvasObj, self->displayMid, self->byteBuffer);
+        static thread_local std::unique_ptr<
+            JNIEnv,
+            void (*)(JNIEnv *)>
+            holder{
+                nullptr,
+                [](JNIEnv *)
+                {
+                    if (tlsJvm)
+                        tlsJvm->DetachCurrentThread();
+                }};
+
+        if (!holder)
+        {
+            tlsJvm = self->jvm;
+
+            JNIEnv *env = nullptr;
+
+            if (self->jvm->GetEnv((void **)&env, JNI_VERSION_1_8) == JNI_EDETACHED)
+            {
+                self->jvm->AttachCurrentThread((void **)&env, nullptr);
+            }
+
+            holder.reset(env);
+        }
+
+        JNIEnv *env = holder.get();
+
+        env->CallVoidMethod(
+            self->javaCanvasObj,
+            self->displayMid,
+            self->byteBuffer);
 
         long currentMs = libvlc_media_player_get_time(self->mp);
-        env->CallVoidMethod(self->javaCanvasObj, self->setPointMid, (jlong)currentMs);
 
-        self->jvm->DetachCurrentThread();
+        env->CallVoidMethod(
+            self->javaCanvasObj,
+            self->setPointMid,
+            (jlong)currentMs);
     }
 
     static void onChapterChanged(const libvlc_event_t *event, void *userData)

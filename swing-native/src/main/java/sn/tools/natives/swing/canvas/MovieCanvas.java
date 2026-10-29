@@ -8,7 +8,7 @@ import java.nio.file.Paths;
 import sn.tools.natives.swing.api.movie.Movie;
 import sn.tools.natives.util.NativeLoader;
 
-class MovieCanvas extends AbstractMovieCanvas implements Movie {
+class MovieCanvas extends AbstractCanvas implements Movie {
 
 	public MovieCanvas() {
 		super();

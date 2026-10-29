@@ -6,19 +6,12 @@ import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.function.Consumer;
-
 import javax.swing.SwingUtilities;
-
 import sn.tools.natives.swing.api.movie.DiscPlayer;
 import sn.tools.natives.util.NativeLoader;
 
-class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
+class DVDCanvas extends AbstractCanvas implements DiscPlayer {
 
 	private final KeyListener keyListener = new KeyListener() {
 
@@ -115,43 +108,7 @@ class DVDCanvas extends AbstractMovieCanvas implements DiscPlayer {
 
 	@Override
 	public long setData(byte[] data) {
-		String tempDir = System.getProperty("java.io.tmpdir");
-
-		Path dir = Paths.get(tempDir, "moviecanvas", String.valueOf(getHandleId()));
-		try {
-			Files.createDirectories(dir);
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
-
-		// data.bin を毎回上書き（レコが単一ファイルを読む仕様ならこれでOK）
-		Path tempFile = dir.resolve("data.bin");
-
-		try {
-			Files.write(tempFile, data);
-			return setFile(tempFile.toAbsolutePath().toString());
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
-
-	@Override
-	public void close() {
-		super.close();
-		// temp ディレクトリを削除（レコ仕様に合わせてクリーンアップ）
-		try {
-			Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "moviecanvas", String.valueOf(getHandleId()));
-			if (Files.exists(dir)) {
-				Files.walk(dir).sorted((a, b) -> b.compareTo(a)) // ファイル→ディレクトリの順で削除
-						.forEach(p -> {
-							try {
-								Files.deleteIfExists(p);
-							} catch (IOException ignored) {
-							}
-						});
-			}
-		} catch (IOException ignored) {
-		}
+		throw new UnsupportedOperationException();
 	}
 
 	@Override

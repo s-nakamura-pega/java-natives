@@ -1,34 +1,15 @@
 package sn.tools.natives.swing.canvas;
 
-import java.awt.BorderLayout;
-import java.awt.Graphics;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-
-import javax.swing.JComponent;
-import javax.swing.SwingUtilities;
 
 import sn.tools.natives.swing.api.movie.DiscPlayer;
 
-public class DVDCanvasComponent extends JComponent implements DiscPlayer {
+public class DVDCanvasComponent extends AbstractCanvasComponent<DVDCanvas> implements DiscPlayer {
 
     private static final long serialVersionUID = 1L;
 
-    private DVDCanvas canvas;
-
-    private final ScheduledExecutorService scheduler = Executors
-            .newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
-
-    private ScheduledFuture<?> future;
-
     public DVDCanvasComponent() {
-        super();
-        canvas = new DVDCanvas();
-        setLayout(new BorderLayout());
-        add(canvas, BorderLayout.CENTER);
+        super(new DVDCanvas());
     }
 
     @Override
@@ -89,18 +70,6 @@ public class DVDCanvasComponent extends JComponent implements DiscPlayer {
     @Override
     public void sendKey(int key) {
         canvas.sendKey(key);
-    }
-
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        if (future != null) {
-            future.cancel(false);
-        }
-
-        future = scheduler.schedule(() -> SwingUtilities.invokeLater(() -> canvas.paintComponent()),
-                300,
-                TimeUnit.MILLISECONDS);
     }
 
     @Override

@@ -220,12 +220,16 @@ public class DVDMovieFrame extends JFrame {
 
 		// 再生可能条件：デコード準備完了 && 再生中ではない
 		playButton.setEnabled(ready && !started);
+		stopButton.setEnabled(ready);
+		forwardButton.setEnabled(ready);
+		backButton.setEnabled(ready);
 		menuButton.setEnabled(ready && started);
 		leftButton.setEnabled(ready && started);
 		rightButton.setEnabled(ready && started);
 		upButton.setEnabled(ready && started);
 		downButton.setEnabled(ready && started);
 		enterButton.setEnabled(ready && started);
+		seekBar.setEnabled(ready);
 	}
 
 	@Override

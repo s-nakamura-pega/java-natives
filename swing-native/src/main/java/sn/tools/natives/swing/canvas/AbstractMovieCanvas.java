@@ -14,7 +14,7 @@ import javax.swing.SwingUtilities;
 
 import sn.tools.natives.object.NativeObject;
 
-abstract class AbstractMovieCanvas extends Canvas implements NativeCanvas {
+abstract class AbstractCanvas extends Canvas implements NativeCanvas {
 
 	private static final long serialVersionUID = 1L;
 
