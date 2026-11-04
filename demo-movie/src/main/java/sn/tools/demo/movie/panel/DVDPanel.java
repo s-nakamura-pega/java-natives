@@ -11,6 +11,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
@@ -37,9 +38,11 @@ public class DVDPanel extends JPanel implements PlayerPanel {
     private final JButton enterButton;
     private final JButton menuButton;
     private final JSlider seekBar;
+    private final JLabel seekLabel = new JLabel("0:00:00 / 0:00:00");
     private boolean isSeekInnerUpdate = false;
     private boolean isMovingPoint = false;
 
+    private volatile long endPoint = 0;
     private double seekValueScale = 0.0;
 
     public DVDPanel() {
@@ -78,6 +81,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
         controlPanel.add(forwardButton);
         controlPanel.add(createKeyJPanel());
         controlPanel.add(seekBar);
+        controlPanel.add(seekLabel);
 
         add(controlPanel, BorderLayout.SOUTH);
 
@@ -137,9 +141,13 @@ public class DVDPanel extends JPanel implements PlayerPanel {
             if (isMovingPoint || seekBar.getValueIsAdjusting()) {
                 return;
             }
-            isSeekInnerUpdate = true;
-            seekBar.setValue((int) (point / seekValueScale));
-            isSeekInnerUpdate = false;
+            String text = PlayerPanel.formatTime(point) + " / " + PlayerPanel.formatTime(endPoint);
+            if (!seekLabel.getText().equals(text)) {
+                seekLabel.setText(text);
+                isSeekInnerUpdate = true;
+                seekBar.setValue((int) (point / seekValueScale));
+                isSeekInnerUpdate = false;
+            }
         });
 
         canvas.setChangeDurationRenderer(duration -> {
@@ -149,6 +157,8 @@ public class DVDPanel extends JPanel implements PlayerPanel {
             isSeekInnerUpdate = true;
             seekValueScale = (double) duration / SEEK_BAR_MAX;
             seekBar.setValue(0);
+            endPoint = duration;
+            seekLabel.setText(PlayerPanel.formatTime(0) + " / " + PlayerPanel.formatTime(endPoint));
             isSeekInnerUpdate = false;
         });
 
@@ -188,8 +198,10 @@ public class DVDPanel extends JPanel implements PlayerPanel {
     private void loadMovieFile(File file) {
         long length = canvas.setFile(file.getAbsolutePath());
         if (length > 0) {
+            endPoint = length;
             seekValueScale = (double) length / SEEK_BAR_MAX;
             seekBar.setValue(0);
+            seekLabel.setText(PlayerPanel.formatTime(0) + " / " + PlayerPanel.formatTime(endPoint));
             updatePlayButtonState();
             System.out.println("動画読み込み成功: " + file.getName());
             canvas.start();

@@ -7,6 +7,7 @@ import java.awt.FlowLayout;
 import java.awt.Window;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
@@ -25,9 +26,11 @@ public class MoviePanel extends JPanel implements PlayerPanel {
     private final JButton stopButton;
     private final JButton loadButton;
     private final JSlider seekBar;
+    private final JLabel seekLabel = new JLabel("0:00:00 / 0:00:00");
     private boolean isSeekInnerUpdate = false;
     private boolean isMovingPoint = false;
 
+    private volatile long endPoint = 0;
     private double seekValueScale = 0.0;
 
     public MoviePanel() {
@@ -55,7 +58,7 @@ public class MoviePanel extends JPanel implements PlayerPanel {
         controlPanel.add(playButton);
         controlPanel.add(stopButton);
         controlPanel.add(seekBar);
-
+        controlPanel.add(seekLabel);
         add(controlPanel, BorderLayout.SOUTH);
 
         // 初期状態では再生不可
@@ -102,9 +105,13 @@ public class MoviePanel extends JPanel implements PlayerPanel {
             if (isMovingPoint || seekBar.getValueIsAdjusting()) {
                 return;
             }
-            isSeekInnerUpdate = true;
-            seekBar.setValue((int) (point / seekValueScale));
-            isSeekInnerUpdate = false;
+            String text = PlayerPanel.formatTime(point) + " / " + PlayerPanel.formatTime(endPoint);
+            if (!seekLabel.getText().equals(text)) {
+                seekLabel.setText(text);
+                isSeekInnerUpdate = true;
+                seekBar.setValue((int) (point / seekValueScale));
+                isSeekInnerUpdate = false;
+            }
         });
 
         // --- 状態監視タイマー（200msごとにボタン状態を更新） ---
@@ -117,8 +124,10 @@ public class MoviePanel extends JPanel implements PlayerPanel {
     private void loadMovieFile(File file) {
         long length = canvas.setFile(file.getAbsolutePath());
         if (length > 0) {
+            endPoint = length;
             seekValueScale = (double) length / SEEK_BAR_MAX;
             seekBar.setValue(0);
+            seekLabel.setText(PlayerPanel.formatTime(0) + " / " + PlayerPanel.formatTime(endPoint));
             updatePlayButtonState();
             System.out.println("動画読み込み成功: " + file.getName());
             canvas.start();
