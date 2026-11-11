@@ -1,4 +1,4 @@
-package sn.tools.demo.movie.panel;
+package sn.tools.demo.players.panel;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -44,6 +44,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
 
     private volatile long endPoint = 0;
     private double seekValueScale = 0.0;
+    private final Timer stateTimer;
 
     public DVDPanel() {
         setLayout(new BorderLayout());
@@ -163,8 +164,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
         });
 
         // --- 状態監視タイマー（200msごとにボタン状態を更新） ---
-        Timer stateTimer = new Timer(200, _ -> updatePlayButtonState());
-        stateTimer.start();
+        stateTimer = new Timer(200, _ -> updatePlayButtonState());
 
         setMinimumSize(new Dimension(850, 600));
     }
@@ -234,6 +234,18 @@ public class DVDPanel extends JPanel implements PlayerPanel {
         downButton.setEnabled(ready && started);
         enterButton.setEnabled(ready && started);
         seekBar.setEnabled(ready);
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        stateTimer.start();
+    }
+
+    @Override
+    public void removeNotify() {
+        stateTimer.stop();
+        super.removeNotify();
     }
 
     @Override

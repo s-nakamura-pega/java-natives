@@ -1,4 +1,4 @@
-package sn.tools.demo.movie.panel;
+package sn.tools.demo.players.panel;
 
 import java.io.File;
 import java.awt.BorderLayout;
@@ -32,6 +32,8 @@ public class MoviePanel extends JPanel implements PlayerPanel {
 
     private volatile long endPoint = 0;
     private double seekValueScale = 0.0;
+
+    private final Timer stateTimer;
 
     public MoviePanel() {
         setLayout(new BorderLayout());
@@ -115,7 +117,7 @@ public class MoviePanel extends JPanel implements PlayerPanel {
         });
 
         // --- 状態監視タイマー（200msごとにボタン状態を更新） ---
-        Timer stateTimer = new Timer(200, _ -> updatePlayButtonState());
+        stateTimer = new Timer(200, _ -> updatePlayButtonState());
         stateTimer.start();
 
         setMinimumSize(new Dimension(850, 600));
@@ -146,6 +148,18 @@ public class MoviePanel extends JPanel implements PlayerPanel {
 
         // 再生可能条件：デコード準備完了 && 再生中ではない
         playButton.setEnabled(ready && !started);
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        stateTimer.start();
+    }
+
+    @Override
+    public void removeNotify() {
+        stateTimer.stop();
+        super.removeNotify();
     }
 
     @Override

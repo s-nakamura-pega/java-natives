@@ -1,4 +1,4 @@
-package sn.tools.demo.movie.icon;
+package sn.tools.demo.players.icon;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;

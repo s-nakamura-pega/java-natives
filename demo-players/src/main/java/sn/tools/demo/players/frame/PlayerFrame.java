@@ -1,4 +1,4 @@
-package sn.tools.demo.movie.frame;
+package sn.tools.demo.players.frame;
 
 import java.awt.CardLayout;
 import java.awt.Dimension;
@@ -9,9 +9,9 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.SwingUtilities;
 
-import sn.tools.demo.movie.icon.PlayerImage;
-import sn.tools.demo.movie.panel.DVDPanel;
-import sn.tools.demo.movie.panel.MoviePanel;
+import sn.tools.demo.players.icon.PlayerImage;
+import sn.tools.demo.players.panel.DVDPanel;
+import sn.tools.demo.players.panel.MoviePanel;
 
 public class PlayerFrame extends JFrame {
 

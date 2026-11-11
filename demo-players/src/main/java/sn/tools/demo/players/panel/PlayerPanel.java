@@ -1,4 +1,4 @@
-package sn.tools.demo.movie.panel;
+package sn.tools.demo.players.panel;
 
 import sn.tools.natives.swing.api.movie.Movie;
 
