@@ -30,7 +30,7 @@ public class PlayerFrame extends JFrame {
 
         setJMenuBar(createMenuBar());
 
-        setMinimumSize(new Dimension(1024, 768));
+        setMinimumSize(new Dimension(1024, 700));
         pack();
         setLocationRelativeTo(null);
     }

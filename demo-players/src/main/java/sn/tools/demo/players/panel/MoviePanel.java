@@ -2,6 +2,7 @@ package sn.tools.demo.players.panel;
 
 import java.io.File;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Window;
@@ -42,6 +43,7 @@ public class MoviePanel extends JPanel implements PlayerPanel {
 
         // --- center: MovieCanvas ---
         canvas = new MovieCanvasComponent();
+        canvas.setBackground(Color.BLACK);
         add(canvas, BorderLayout.CENTER);
 
         // --- north: ファイル読み込み ---
@@ -57,7 +59,7 @@ public class MoviePanel extends JPanel implements PlayerPanel {
         stopButton = new JButton("■ 停止");
 
         seekBar = new JSlider(0, SEEK_BAR_MAX, 0);
-        seekBar.setPreferredSize(new java.awt.Dimension(300, 30));
+        seekBar.setPreferredSize(new Dimension(300, 30));
 
         controlPanel.add(playButton);
         controlPanel.add(stopButton);

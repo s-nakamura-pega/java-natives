@@ -1,6 +1,7 @@
 package sn.tools.demo.players.panel;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
@@ -53,6 +54,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
 
         // --- center: MovieCanvas ---
         canvas = new DVDCanvasComponent();
+        canvas.setBackground(Color.BLACK);
         add(canvas, BorderLayout.CENTER);
 
         // --- north: ファイル読み込み ---
