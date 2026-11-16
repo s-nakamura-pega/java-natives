@@ -6,6 +6,8 @@ public interface PlayerPanel {
 
     Movie getMovieComponent();
 
+    void displayControlPanel(boolean isDisplay);
+
     public static String formatTime(long time) {
         long hours = time / 3600000;
         long minutes = (time % 3600000) / 60000;

@@ -26,6 +26,8 @@ public class DVDPanel extends JPanel implements PlayerPanel {
     private static final int SEEK_BAR_MAX = 1000;
 
     private final DVDCanvasComponent canvas;
+    private final JPanel filePanel;
+    private final JPanel controlPanel;
     private final JButton playButton;
     private final JButton stopButton;
     private final JButton forwardButton;
@@ -54,13 +56,13 @@ public class DVDPanel extends JPanel implements PlayerPanel {
         add(canvas, BorderLayout.CENTER);
 
         // --- north: ファイル読み込み ---
-        JPanel filePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        filePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         loadButton = new JButton("💿 ディスクを開く");
         filePanel.add(loadButton);
         add(filePanel, BorderLayout.NORTH);
 
         // --- south: 操作パネル ---
-        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        controlPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
 
         playButton = new JButton("▶ 再生");
         stopButton = new JButton("■ 停止");
@@ -134,6 +136,13 @@ public class DVDPanel extends JPanel implements PlayerPanel {
                 int ms = seekBar.getValue();
                 canvas.movePoint((long) (ms * seekValueScale));
                 isMovingPoint = false;
+            } else {
+                int ms = seekBar.getValue();
+                String text = PlayerPanel.formatTime((long) (ms * seekValueScale)) + " / "
+                        + PlayerPanel.formatTime(endPoint);
+                if (!seekLabel.getText().equals(text)) {
+                    seekLabel.setText(text);
+                }
             }
         });
 
@@ -251,6 +260,12 @@ public class DVDPanel extends JPanel implements PlayerPanel {
     @Override
     public Movie getMovieComponent() {
         return canvas;
+    }
+
+    @Override
+    public void displayControlPanel(boolean isDisplay) {
+        filePanel.setVisible(isDisplay);
+        controlPanel.setVisible(isDisplay);
     }
 
 }

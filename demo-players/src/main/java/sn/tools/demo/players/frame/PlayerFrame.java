@@ -1,6 +1,5 @@
 package sn.tools.demo.players.frame;
 
-import java.awt.CardLayout;
 import java.awt.Dimension;
 
 import javax.swing.JFrame;
@@ -61,6 +60,7 @@ public class PlayerFrame extends JFrame {
 
     private JMenuBar createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
+
         JMenu changePanelMenu = new JMenu("Change Player");
         JMenuItem dvdMenuItem = new JMenuItem("DVD");
         JMenuItem movieMenuItem = new JMenuItem("Movie");
@@ -70,6 +70,29 @@ public class PlayerFrame extends JFrame {
         dvdMenuItem.setMnemonic('D');
         movieMenuItem.setMnemonic('M');
         menuBar.add(changePanelMenu);
+
+        JMenu controlPanelMenu = new JMenu("Control Panel");
+        JMenuItem display = new JMenuItem("Display");
+        display.addActionListener(_ -> {
+            dvdPanel.displayControlPanel(true);
+            moviePanel.displayControlPanel(true);
+            revalidate();
+            repaint();
+        });
+        JMenuItem hidden = new JMenuItem("Hidden");
+        hidden.addActionListener(_ -> {
+            dvdPanel.displayControlPanel(false);
+            moviePanel.displayControlPanel(false);
+            revalidate();
+            repaint();
+        });
+        controlPanelMenu.add(display);
+        controlPanelMenu.add(hidden);
+        menuBar.add(controlPanelMenu);
+        controlPanelMenu.setMnemonic('P');
+        display.setMnemonic('D');
+        hidden.setMnemonic('H');
+
         return menuBar;
     }
 
