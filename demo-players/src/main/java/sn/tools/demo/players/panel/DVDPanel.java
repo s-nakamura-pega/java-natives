@@ -18,15 +18,12 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-
-import sn.tools.natives.swing.api.movie.Movie;
 import sn.tools.natives.swing.canvas.DVDCanvasComponent;
 
-public class DVDPanel extends JPanel implements PlayerPanel {
+public class DVDPanel extends PlayerPanel<DVDCanvasComponent> {
 
     private static final int SEEK_BAR_MAX = 1000;
 
-    private final DVDCanvasComponent canvas;
     private final JPanel filePanel;
     private final JPanel controlPanel;
     private final JButton playButton;
@@ -50,12 +47,12 @@ public class DVDPanel extends JPanel implements PlayerPanel {
     private final Timer stateTimer;
 
     public DVDPanel() {
+        super(new DVDCanvasComponent());
         setLayout(new BorderLayout());
 
         // --- center: MovieCanvas ---
-        canvas = new DVDCanvasComponent();
-        canvas.setBackground(Color.BLACK);
-        add(canvas, BorderLayout.CENTER);
+        canvasComponent.setBackground(Color.BLACK);
+        add(canvasComponent, BorderLayout.CENTER);
 
         // --- north: ファイル読み込み ---
         filePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -107,26 +104,26 @@ public class DVDPanel extends JPanel implements PlayerPanel {
 
         // --- 再生 ---
         playButton.addActionListener(_ -> {
-            canvas.start();
+            canvasComponent.start();
             updatePlayButtonState();
         });
 
         // --- 停止 ---
         stopButton.addActionListener(_ -> {
-            canvas.stop();
+            canvasComponent.stop();
             updatePlayButtonState();
         });
 
-        forwardButton.addActionListener(_ -> canvas.skip(true));
+        forwardButton.addActionListener(_ -> canvasComponent.skip(true));
 
-        backButton.addActionListener(_ -> canvas.skip(false));
+        backButton.addActionListener(_ -> canvasComponent.skip(false));
 
-        menuButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_M));
-        upButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_UP));
-        downButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_DOWN));
-        leftButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_LEFT));
-        rightButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_RIGHT));
-        enterButton.addActionListener(_ -> canvas.sendKey(KeyEvent.VK_ENTER));
+        menuButton.addActionListener(_ -> canvasComponent.sendKey(KeyEvent.VK_M));
+        upButton.addActionListener(_ -> canvasComponent.sendKey(KeyEvent.VK_UP));
+        downButton.addActionListener(_ -> canvasComponent.sendKey(KeyEvent.VK_DOWN));
+        leftButton.addActionListener(_ -> canvasComponent.sendKey(KeyEvent.VK_LEFT));
+        rightButton.addActionListener(_ -> canvasComponent.sendKey(KeyEvent.VK_RIGHT));
+        enterButton.addActionListener(_ -> canvasComponent.sendKey(KeyEvent.VK_ENTER));
 
         // --- シークバー操作 ---
         seekBar.addChangeListener(_ -> {
@@ -136,7 +133,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
             if (!seekBar.getValueIsAdjusting()) {
                 isMovingPoint = true;
                 int ms = seekBar.getValue();
-                canvas.movePoint((long) (ms * seekValueScale));
+                canvasComponent.movePoint((long) (ms * seekValueScale));
                 isMovingPoint = false;
             } else {
                 int ms = seekBar.getValue();
@@ -149,7 +146,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
         });
 
         // MovieCanvas → seekBar の同期
-        canvas.setPointRenderer(point -> {
+        canvasComponent.setPointRenderer(point -> {
             if (isMovingPoint || seekBar.getValueIsAdjusting()) {
                 return;
             }
@@ -162,7 +159,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
             }
         });
 
-        canvas.setChangeDurationRenderer(duration -> {
+        canvasComponent.setChangeDurationRenderer(duration -> {
             if (isMovingPoint || seekBar.getValueIsAdjusting()) {
                 return;
             }
@@ -207,7 +204,7 @@ public class DVDPanel extends JPanel implements PlayerPanel {
     }
 
     private void loadMovieFile(File file) {
-        long length = canvas.setFile(file.getAbsolutePath());
+        long length = canvasComponent.setFile(file.getAbsolutePath());
         if (length > 0) {
             endPoint = length;
             seekValueScale = (double) length / SEEK_BAR_MAX;
@@ -215,10 +212,10 @@ public class DVDPanel extends JPanel implements PlayerPanel {
             seekLabel.setText(PlayerPanel.formatTime(0) + " / " + PlayerPanel.formatTime(endPoint));
             updatePlayButtonState();
             System.out.println("動画読み込み成功: " + file.getName());
-            canvas.start();
-            canvas.setFocusable(true);
+            canvasComponent.start();
+            canvasComponent.setFocusable(true);
             SwingUtilities.invokeLater(() -> {
-                canvas.requestFocusInWindow();
+                canvasComponent.requestFocusInWindow();
             });
         } else {
             System.err.println("動画読み込み失敗");
@@ -230,8 +227,8 @@ public class DVDPanel extends JPanel implements PlayerPanel {
      * 再生ボタンの活性/非活性を更新する
      */
     private void updatePlayButtonState() {
-        boolean ready = canvas.isDecodeReady();
-        boolean started = canvas.isStarted();
+        boolean ready = canvasComponent.isDecodeReady();
+        boolean started = canvasComponent.isStarted();
 
         // 再生可能条件：デコード準備完了 && 再生中ではない
         playButton.setEnabled(ready && !started);
@@ -257,11 +254,6 @@ public class DVDPanel extends JPanel implements PlayerPanel {
     public void removeNotify() {
         stateTimer.stop();
         super.removeNotify();
-    }
-
-    @Override
-    public Movie getMovieComponent() {
-        return canvas;
     }
 
     @Override

@@ -114,7 +114,6 @@ struct PlayerStruct
         : jvm(vm)
     {
         avformat_network_init();
-        Pa_Initialize();
 
         JNIEnv *env = nullptr;
         jvm->AttachCurrentThread((void **)&env, nullptr);
@@ -262,6 +261,14 @@ struct PlayerStruct
         // audio codec
         if (audioStreamIndex >= 0)
         {
+            if (paStream)
+            {
+                Pa_StopStream(paStream);
+                Pa_CloseStream(paStream);
+            }
+            Pa_Terminate();
+            Pa_Initialize();
+
             const AVCodec *adec = avcodec_find_decoder(audioStream->codecpar->codec_id);
             audioCtx = avcodec_alloc_context3(adec);
             avcodec_parameters_to_context(audioCtx, audioStream->codecpar);

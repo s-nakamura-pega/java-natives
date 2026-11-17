@@ -11,7 +11,9 @@ import java.util.concurrent.TimeUnit;
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 
-public abstract class AbstractCanvasComponent<T extends AbstractCanvas> extends JComponent {
+import sn.tools.natives.object.NativeObject;
+
+public abstract class AbstractCanvasComponent<T extends AbstractCanvas> extends JComponent implements AutoCloseable {
 
     protected T canvas;
     private ScheduledExecutorService scheduler;
@@ -82,6 +84,11 @@ public abstract class AbstractCanvasComponent<T extends AbstractCanvas> extends 
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
         }
+    }
+
+    @Override
+    public void close() {
+        NativeObject.close(canvas);
     }
 
 }

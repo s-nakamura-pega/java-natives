@@ -1,12 +1,22 @@
 package sn.tools.demo.players.panel;
 
-import sn.tools.natives.swing.api.movie.Movie;
+import javax.swing.JPanel;
 
-public interface PlayerPanel {
+import sn.tools.natives.swing.canvas.AbstractCanvasComponent;
 
-    Movie getMovieComponent();
+public abstract class PlayerPanel<T extends AbstractCanvasComponent<?>> extends JPanel {
 
-    void displayControlPanel(boolean isDisplay);
+    protected final T canvasComponent;
+
+    public PlayerPanel(T canvasComponent) {
+        this.canvasComponent = canvasComponent;
+    }
+
+    public void dispose() {
+        canvasComponent.close();
+    }
+
+    public abstract void displayControlPanel(boolean isDisplay);
 
     public static String formatTime(long time) {
         long hours = time / 3600000;

@@ -38,7 +38,7 @@ public class PlayerFrame extends JFrame {
     private void showPanel(String name) {
         switch (name) {
             case "DVD" -> {
-                moviePanel.getMovieComponent().stop();
+                moviePanel.dispose();
                 SwingUtilities.invokeLater(() -> {
                     setContentPane(dvdPanel);
                     revalidate();
@@ -46,7 +46,7 @@ public class PlayerFrame extends JFrame {
                 });
             }
             case "Movie" -> {
-                dvdPanel.getMovieComponent().stop();
+                dvdPanel.dispose();
                 SwingUtilities.invokeLater(() -> {
                     setContentPane(moviePanel);
                     revalidate();
@@ -98,8 +98,8 @@ public class PlayerFrame extends JFrame {
 
     @Override
     public void dispose() {
-        dvdPanel.getMovieComponent().stop();
-        moviePanel.getMovieComponent().stop();
+        dvdPanel.dispose();
+        moviePanel.dispose();
         super.dispose();
         System.exit(0);
     }
